@@ -1,0 +1,24 @@
+read_id	length	seeds	matched_seeds	coherent_hits	contig	strand	anchor	initial_decision	final_decision
+d75abbf1-fc54-4911-a9e0-5ac5d51a7e02	1806	58	3	3	NC_063383.1	-	4700	accept	accept
+52987f6a-7244-4108-a2c6-8c44c89856e7	1240	40	0	0				reject	reject
+5b8354e5-c54a-4d64-9850-856909cc68dd	14594	470	0	0				reject	reject
+064f987a-6e4b-440f-bcc4-88b0642ea11e	5204	167	0	0				reject	reject
+8c460ec0-f085-40d5-8e27-226caa7efe22	13296	428	57	23	NC_063383.1	+	114454	accept	accept
+d602078f-63cc-44ef-b4c9-f9a48017f9a7	10355	334	40	19	NC_063383.1	+	24824	accept	accept
+2bceb392-4fe2-45d6-bdd6-f1f8aa20d3b2	11714	377	34	12	NC_063383.1	+	94458	accept	accept
+ae604ba4-010b-492e-ac68-056011fa227e	9776	315	47	41	NC_063383.1	+	13227	accept	accept
+36414293-65a9-429f-b700-94b6f016f1c2	2976	96	0	0				reject	reject
+a306bf59-16a4-4bf7-a646-787b2ef831c4	1372	44	0	0				reject	reject
+7c039920-fe4f-4d5b-b42d-1e88064452c7	2221	71	7	7	NC_063383.1	+	167166	accept	accept
+2cafa634-27c9-48bf-a277-bcad49faba95	9885	318	0	0				reject	reject
+ecd6cae8-0363-4663-8f5d-be45e8cda5ba	29505	951	0	0				reject	reject
+9afb7fb7-9597-44b0-8f92-075702e1458a	2994	96	0	0				reject	reject
+d791bd59-fdbe-4657-90b7-6cafad3fec3f	5138	165	0	0				reject	reject
+b5fb9868-9f65-40f5-9bf4-556cdf4249a3	36211	1168	1	1	NC_063383.1	+	161360	gray	reject
+60b7d1ed-e129-4275-838e-d9d9d6d87fc3	13169	424	0	0				reject	reject
+80ef2826-61f9-45fe-a497-2e812d8fb1d4	2756	88	0	0				reject	reject
+5b94d2e7-a671-4bb1-91f4-f38731b5c709	14068	453	49	23	NC_063383.1	+	165438	accept	accept
+0fb18ad1-fbae-439e-b581-10459637d12b	14236	459	52	25	NC_063383.1	+	98604	accept	accept
+a428d9c3-7f7b-4a93-beaf-f41c7c904df0	27065	873	0	0				reject	reject
+8147e998-7ef0-47fb-9d24-bc5360f2a9e0	60084	1938	0	0				reject	reject
+eea33b87-402d-4d03-838a-ce00201bdf9a	75297	2428	0	0				reject	reject

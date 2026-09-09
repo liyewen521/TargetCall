@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+
+# 下载的原始测序数据（可从 ENA 重新下载）
+hbv_test/data/
+*.fastq.gz
+
+# 中间产物（basecall 输出，会被 fastq_to_fasta 转换后删除）
+*.fastq
+
+# 生成的哈希索引（可从 fasta 重新生成）
+*.gsi

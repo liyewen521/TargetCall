@@ -1,0 +1,24 @@
+> loading model ../bonito/models/TINYX011/
+> outputting unaligned fastq
+> calling: 0 reads [00:00, ? reads/s]> calling: 1 reads [00:01,  1.73s/ reads]> calling: 3 reads [00:01,  1.23s/ reads]> calling: 8 reads [00:01,  1.15 reads/s]> calling: 12 reads [00:02,  1.63 reads/s]> calling: 15 reads [00:02,  2.27 reads/s]> calling: 20 reads [00:02,  3.12 reads/s]> calling: 23 reads [00:02,  3.90 reads/s]                                          > completed reads: 23
+> duration: 0:00:03
+> samples per second 1.5E+06
+> done
+[M::mm_idx_gen::0.006*1.18] collected minimizers
+[M::mm_idx_gen::0.009*4.92] sorted minimizers
+[M::main::0.009*4.92] loaded/built the index for 1 target sequence(s)
+[M::mm_mapopt_update::0.010*4.53] mid_occ = 10
+[M::mm_idx_stat] kmer size: 15; skip: 10; is_hpc: 0; #seq: 1
+[M::mm_idx_stat::0.011*4.28] distinct minimizers: 35546 (96.57% are singletons); average occurrences: 1.038; average spacing: 5.347; total length: 197209
+[M::worker_pipeline::0.018*4.57] mapped 23 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -a -x map-ont -t 16 ../sample_data/Monkeypox_virus.fasta /Projects/ACCESS_IVFS/targetcall-reproduction/output.fasta
+[M::main] Real time: 0.022 sec; CPU: 0.084 sec; Peak RSS: 0.014 GB
+
+bonito basecaller ../bonito/models/TINYX011/ ../sample_data/fast5/ --batchsize 3200 --modeltype tinynoskipx011 > /Projects/ACCESS_IVFS/targetcall-reproduction/output.fastq
+
+python fastq_to_fasta.py /Projects/ACCESS_IVFS/targetcall-reproduction/output.fastq /Projects/ACCESS_IVFS/targetcall-reproduction/output.fasta 
+
+minimap2 -a -x map-ont -t 16 ../sample_data/Monkeypox_virus.fasta /Projects/ACCESS_IVFS/targetcall-reproduction/output.fasta  > /Projects/ACCESS_IVFS/targetcall-reproduction/output.sam 
+
+python extract_filtered.py /Projects/ACCESS_IVFS/targetcall-reproduction/output.sam /Projects/ACCESS_IVFS/targetcall-reproduction/readids.txt 
