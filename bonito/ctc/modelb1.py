@@ -8,7 +8,7 @@ using FP precision
 import numpy as np
 from bonito.nn import Permute, layers
 import torch
-from torch.nn.functional import log_softmax, ctc_loss
+from torch.nn.functional import softmax, ctc_loss
 from torch.nn import Module, ModuleList, Sequential, Conv1d, BatchNorm1d, Dropout
 from fast_ctc_decode import beam_search, viterbi_search
 
@@ -39,7 +39,7 @@ class ModelB1(Module):
         return self.decoder(encoded)
 
     def decode(self, x, beamsize=5, threshold=1e-3, qscores=False, return_path=False):
-        x = x.exp().cpu().numpy().astype(np.float32)
+        x = x.cpu().numpy().astype(np.float32)
         if beamsize == 1 or qscores:
             seq, path  = viterbi_search(x, self.alphabet, qscores, self.qscale, self.qbias)
         else:
@@ -51,8 +51,8 @@ class ModelB1(Module):
         T, N, C = log_probs.shape
         weights = weights or torch.cat([torch.tensor([0.4]), (0.1 / (C - 1)) * torch.ones(C - 1)])
         log_probs_lengths = torch.full(size=(N, ), fill_value=T, dtype=torch.int64)
-        loss = ctc_loss(log_probs.to(torch.float32), targets, log_probs_lengths, lengths, reduction='mean')
-        label_smoothing_loss = -((log_probs * weights.to(log_probs.device)).mean())
+        loss = ctc_loss(log_probs.log().to(torch.float32), targets, log_probs_lengths, lengths, reduction='mean')
+        label_smoothing_loss = -((log_probs.log() * weights.to(log_probs.device)).mean())
         return {'loss': loss + label_smoothing_loss, 'ctc_loss': loss, 'label_smooth_loss': label_smoothing_loss}
 
 
@@ -305,4 +305,4 @@ class Decoder(Module):
         )
 
     def forward(self, x):
-        return log_softmax(self.layers(x), dim=-1)
+        return softmax(self.layers(x), dim=-1)
