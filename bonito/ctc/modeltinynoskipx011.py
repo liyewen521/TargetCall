@@ -13,9 +13,9 @@ class ModelTinyNoSkipX011(Module):
     Model template for QuartzNet style architectures
     https://arxiv.org/pdf/1910.10261.pdf
     """
-    def __init__(self, config):
-        super(ModelTinyNoSkipX011, self).__init__()
-        if 'qscore' not in config:
+    def __init__(self, config=None):
+        super().__init__()
+        if config is None or 'qscore' not in config:
             self.qbias = 0.0
             self.qscale = 1.0
         else:
@@ -23,11 +23,15 @@ class ModelTinyNoSkipX011(Module):
             self.qscale = config['qscore']['scale']
 
         self.config = config
-        self.stride = config['block'][0]['stride'][0]
-        self.alphabet = config['labels']['labels']
-        self.features =48
+        if config is None:
+            self.stride = 3
+            self.alphabet = ['N', 'A', 'C', 'G', 'T']
+        else:
+            self.stride = config['block'][0]['stride'][0]
+            self.alphabet = config['labels']['labels']
+        self.features = 48
         self.encoder = Encoder(config)
-        self.decoder = Decoder(48, len(self.alphabet))
+        self.decoder = Decoder(self.features, len(self.alphabet))
 
     def forward(self, x):
         encoded = self.encoder(x)
@@ -55,19 +59,11 @@ class Encoder(Module):
     """
     Builds the model encoder
     """
-    def __init__(self, config):
-        super(Encoder, self).__init__()
-        self.config = config
-
-        features = self.config['input']['features']
-        activation = layers[self.config['encoder']['activation']]()
+    def __init__(self, config=None):
+        super().__init__()
+        activation_name = 'relu' if config is None else config['encoder']['activation']
+        activation = layers[activation_name]()
         encoder_layers = []
-        layer_list=[]
-        b1_b=[]
-        b2_b=[]
-        b3_b=[]
-        b4_b=[]
-        b5_b=[]
         c1_b=Block( 1, 48, activation,
                         repeat=1, kernel_size=9,
                         stride=3, dilation=1,

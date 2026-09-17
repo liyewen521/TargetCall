@@ -16,9 +16,9 @@ class Model(Module):
     Model template for QuartzNet style architectures
     https://arxiv.org/pdf/1910.10261.pdf
     """
-    def __init__(self, config):
-        super(Model, self).__init__()
-        if 'qscore' not in config:
+    def __init__(self, config=None):
+        super().__init__()
+        if config is None or 'qscore' not in config:
             self.qbias = 0.0
             self.qscale = 1.0
         else:
@@ -26,9 +26,14 @@ class Model(Module):
             self.qscale = config['qscore']['scale']
 
         self.config = config
-        self.stride = config['block'][0]['stride'][0]
-        self.alphabet = config['labels']['labels']
-        self.features = config['block'][-1]['filters']
+        if config is None:
+            self.stride = 3
+            self.alphabet = ['N', 'A', 'C', 'G', 'T']
+            self.features = 48
+        else:
+            self.stride = config['block'][0]['stride'][0]
+            self.alphabet = config['labels']['labels']
+            self.features = config['block'][-1]['filters']
         self.encoder = Encoder(config)
         self.decoder = Decoder(self.features, len(self.alphabet))
 
@@ -57,15 +62,42 @@ class Encoder(Module):
     """
     Builds the model encoder
     """
-    def __init__(self, config):
-        super(Encoder, self).__init__()
-        self.config = config
+    def __init__(self, config=None):
+        super().__init__()
+        if config is None:
+            self.encoder = self._static_encoder()
+        else:
+            self.encoder = self._config_encoder(config)
 
-        features = self.config['input']['features']
-        activation = layers[self.config['encoder']['activation']]()
+    @staticmethod
+    def _static_encoder():
+        activation = layers['relu']()
+        return Sequential(
+            Block(1, 344, activation, repeat=1, kernel_size=(9,), stride=(3,),
+                  dilation=(1,), dropout=0.05, residual=False, separable=False),
+            Block(344, 424, activation, repeat=2, kernel_size=(115,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=True, separable=True),
+            Block(424, 464, activation, repeat=7, kernel_size=(5,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=True, separable=True),
+            Block(464, 456, activation, repeat=4, kernel_size=(123,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=True, separable=True),
+            Block(456, 440, activation, repeat=9, kernel_size=(9,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=True, separable=True),
+            Block(440, 280, activation, repeat=6, kernel_size=(31,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=True, separable=True),
+            Block(280, 384, activation, repeat=1, kernel_size=(67,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=False, separable=True),
+            Block(384, 48, activation, repeat=1, kernel_size=(15,), stride=(1,),
+                  dilation=(1,), dropout=0.05, residual=False, separable=False),
+        )
+
+    @staticmethod
+    def _config_encoder(config):
+        features = config['input']['features']
+        activation = layers[config['encoder']['activation']]()
         encoder_layers = []
 
-        for layer in self.config['block']:
+        for layer in config['block']:
             encoder_layers.append(
                 Block(
                     features, layer['filters'], activation,
@@ -75,10 +107,9 @@ class Encoder(Module):
                     separable=layer['separable'],
                 )
             )
-
             features = layer['filters']
 
-        self.encoder = Sequential(*encoder_layers)
+        return Sequential(*encoder_layers)
 
     def forward(self, x):
         return self.encoder(x)

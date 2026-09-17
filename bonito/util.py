@@ -36,6 +36,17 @@ split_cigar = re.compile(r"(?P<len>\d+)(?P<op>\D+)")
 default_data = os.path.join(__data__, "dna_r9.4.1")
 default_config = os.path.join(__configs__, "dna_r9.4.1@v3.1.toml")
 
+STATIC_MODEL_NAMES = {
+    "default": "default",
+    "tinynoskipx1": "TINYX1",
+    "tinynoskipx0111": "TINYX0111",
+    "tinynoskipx011": "TINYX011",
+    "tinynoskipx01": "TINYX01",
+    "tinynoskipx2": "TINYX2",
+    "tinynoskipx3": "TINYX3",
+    "tinynoskipx4": "TINYX4",
+}
+
 
 def init(seed, device):
     """
@@ -251,6 +262,21 @@ def match_names(state_dict, model):
     return OrderedDict([(k, remap[k]) for k in state_dict.keys()])
 
 
+def _load_static_model(dirname, modeltype):
+    """Build a bundled CTC model without using its TOML architecture."""
+    model_name = STATIC_MODEL_NAMES.get(modeltype)
+    if model_name is None and modeltype is None:
+        directory_name = os.path.basename(os.path.normpath(dirname))
+        if directory_name in STATIC_MODEL_NAMES.values():
+            model_name = directory_name
+
+    if model_name is None:
+        return None
+
+    ctc = import_module("bonito.ctc")
+    return ctc.create_model(model_name)
+
+
 def load_model(dirname, device,modeltype=None, weights=None, half=None, chunksize=None, batchsize=None, overlap=None, quantize=False, use_koi=False):
     """
     Load a model from disk
@@ -277,25 +303,17 @@ def load_model(dirname, device,modeltype=None, weights=None, half=None, chunksiz
     quantize = basecall_params["quantize"] = basecall_params.get("quantize") if quantize is None else quantize
     config["basecaller"] = basecall_params
 
-    if(modeltype=="tinynoskipx4"):
-        model = load_symbol(config, 'ModelTinyNoSkipX4')(config) 
-    elif(modeltype=="tinynoskipx1"):
-        model = load_symbol(config, 'ModelTinyNoSkipX1')(config) 
-    elif(modeltype=="tinynoskipx2"):
-        model = load_symbol(config, 'ModelTinyNoSkipX2')(config) 
-    elif(modeltype=="tinynoskipx3"):
-        model = load_symbol(config, 'ModelTinyNoSkipX3')(config) 
-    elif(modeltype=="tinynoskipx01"):
-        model = load_symbol(config, 'ModelTinyNoSkipX01')(config)
-    elif(modeltype=="tinynoskipx0111"):
-        model = load_symbol(config, 'ModelTinyNoSkipX0111')(config)
-    elif(modeltype=="tinynoskipx011"):
-        model = load_symbol(config, 'ModelTinyNoSkipX011')(config)
-    elif(modeltype=="onlyb1"):
+    model = _load_static_model(dirname, modeltype)
+    if model is not None:
+        model.config = config
+        if 'qscore' in config:
+            model.qbias = config['qscore']['bias']
+            model.qscale = config['qscore']['scale']
+    elif modeltype == "onlyb1":
         model = load_symbol(config, 'ModelB1')(config)
-    elif(modeltype=="onlyb1b2"):
+    elif modeltype == "onlyb1b2":
         model = load_symbol(config, 'ModelB1B2')(config)
-    elif(modeltype=="onlyb1x2"):
+    elif modeltype == "onlyb1x2":
         model = load_symbol(config, 'ModelB1X2')(config)
     else:
         Model = load_symbol(config, "Model")

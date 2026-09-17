@@ -47,6 +47,30 @@ You can find all models listed under bonito/models/.
 | TINYX2  | LC-Main/4 | 52K  | 80.82%  |
 | TINYX3  | LC-Main/8  | 21K  | 70.42%  |
 
+### Direct model construction
+
+The bundled CTC networks can be constructed directly without parsing a
+`config.toml` architecture:
+
+```python
+import torch
+
+from bonito.ctc import DefaultModel, TinyX011Model
+
+default_model = DefaultModel()
+tiny_model = TinyX011Model()
+
+weights = torch.load(
+    "bonito/models/TINYX011/weights_1.tar",
+    map_location="cpu",
+)
+tiny_model.load_state_dict(weights, strict=True)
+tiny_model.eval()
+```
+
+For name-based selection, use `create_model("default")` or one of
+`TINYX0111`, `TINYX011`, `TINYX01`, `TINYX2`, and `TINYX3`.
+
 ## Reproducing the results in the paper
 
 We explain how to reproduce the results we show in the TargetCall paper in the [test directory](./test/).

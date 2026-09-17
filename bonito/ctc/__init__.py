@@ -11,3 +11,35 @@ from .modeltinynoskipx3 import ModelTinyNoSkipX3
 from .modelb1 import ModelB1
 from .modelb1b2 import ModelB1B2
 from .modelb1x2 import ModelB1X2
+
+
+DefaultModel = Model
+TinyX1Model = ModelTinyNoSkipX1
+TinyX0111Model = ModelTinyNoSkipX0111
+TinyX011Model = ModelTinyNoSkipX011
+TinyX01Model = ModelTinyNoSkipX01
+TinyX2Model = ModelTinyNoSkipX2
+TinyX3Model = ModelTinyNoSkipX3
+TinyX4Model = ModelTinyNoSkipX4
+
+
+MODEL_CLASSES = {
+    'default': DefaultModel,
+    'TINYX1': TinyX1Model,
+    'TINYX0111': TinyX0111Model,
+    'TINYX011': TinyX011Model,
+    'TINYX01': TinyX01Model,
+    'TINYX2': TinyX2Model,
+    'TINYX3': TinyX3Model,
+    'TINYX4': TinyX4Model,
+}
+
+
+def create_model(name='default'):
+    """Create a built-in CTC model without reading a TOML configuration."""
+    try:
+        model_class = MODEL_CLASSES[name]
+    except KeyError as error:
+        available = ', '.join(MODEL_CLASSES)
+        raise ValueError(f"unknown model '{name}'; choose from: {available}") from error
+    return model_class()
