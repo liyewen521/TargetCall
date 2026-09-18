@@ -2,9 +2,11 @@
 
 Each model lives in its own module and declares every convolution and
 batch-norm layer explicitly; there are no block wrappers or generated layer
-specs. The package only depends on PyTorch and loads flattened weights. Use
-``convert_legacy.py`` to turn the original TargetCall checkpoints into that
-flattened form.
+specs. The layers use the hardware-friendly layout: 2D convolutions with a
+singleton height dim ``[batch, channels, 1, length]`` and an NDWC output
+``[batch, 1, time, 5]`` (softmax probabilities). The package only depends on
+PyTorch and loads flattened weights. Use ``convert_legacy.py`` to turn the
+original TargetCall checkpoints into that flattened form.
 """
 
 import os
@@ -41,16 +43,24 @@ def create_model(name="default"):
     return model_class()
 
 
+def to_deploy_shapes(state):
+    """Give 1D conv weights their H=1 dimension so they fit Conv2d layers."""
+    return {
+        key: value.unsqueeze(2) if value.dim() == 3 else value
+        for key, value in state.items()
+    }
+
+
 def flatten_state_dict(state):
-    """Strip wrapper prefixes from a checkpoint's state dict."""
+    """Strip wrapper prefixes and adapt conv weights to the deploy layout."""
     if "model_state_dict" in state:
         state = state["model_state_dict"]
     elif "state_dict" in state:
         state = state["state_dict"]
-    return {
+    return to_deploy_shapes({
         key[7:] if key.startswith("module.") else key: value
         for key, value in state.items()
-    }
+    })
 
 
 def load_weights(model, weights, map_location="cpu", strict=True):
@@ -84,6 +94,7 @@ __all__ = [
     "MODEL_CLASSES",
     "WEIGHTS_DIRECTORY",
     "create_model",
+    "to_deploy_shapes",
     "flatten_state_dict",
     "load_weights",
     "load_model",

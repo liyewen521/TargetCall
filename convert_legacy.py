@@ -13,7 +13,7 @@ import os
 
 import torch
 
-from inference import MODEL_CLASSES, WEIGHTS_DIRECTORY, create_model
+from inference import MODEL_CLASSES, WEIGHTS_DIRECTORY, create_model, to_deploy_shapes
 from legacy_state_keys import LEGACY_STATE_KEYS
 
 
@@ -43,7 +43,7 @@ def flatten_legacy_state_dict(model_name, state):
                 "missing legacy weight '%s' for '%s'" % (legacy_key, new_key)
             )
         flattened[new_key] = state[legacy_key]
-    return flattened
+    return to_deploy_shapes(flattened)
 
 
 def convert(model_name, weights_path, output_path=None):

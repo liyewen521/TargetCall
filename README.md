@@ -67,8 +67,10 @@ All models are stored under `checkpoints/`.
 
 Each model has its own file and declares every convolution and batch-norm layer
 explicitly in `__init__` and `forward`; there are no block wrappers or generated
-layer specs. These modules only depend on PyTorch: they do not import the
-basecalling code and do not read `config.toml`.
+layer specs. The layers use the hardware-friendly layout: 2D convolutions with a
+singleton height dimension (`[batch, channels, 1, length]`) and an NDWC output
+`[batch, 1, time, 5]` with a final `Softmax`. These modules only depend on
+PyTorch: they do not import the basecalling code and do not read `config.toml`.
 
 | File | Class | Model name |
 | --- | --- | --- |
@@ -98,14 +100,14 @@ model = load_model(
     device="cpu",
 )
 
-signal = torch.randn(1, 1, 4000)
+signal = torch.randn(1, 1, 1, 4000)
 with torch.no_grad():
-    log_probabilities = model(signal)
+    probabilities = model(signal)
 ```
 
-- Input layout: `[batch, 1, samples]`.
-- Output layout: `[time, batch, 5]` log probabilities, where
-  `time = (samples - 1) // stride + 1` and `stride` is `3`.
+- Input layout: `[batch, 1, 1, samples]` (NCHW with a singleton height).
+- Output layout: `[batch, 1, time, 5]` softmax probabilities (NDWC, class last),
+  where `time = (samples - 1) // stride + 1` and `stride` is `3`.
 - Supported names: `default`, `TINYX0111`, `TINYX011`, `TINYX01`, `TINYX2`,
   `TINYX3`.
 - Calling `load_model("TINYX011")` without a path defaults to
@@ -124,8 +126,10 @@ model = create_model("TINYX3")
 ### Weights
 
 Each model is its own class with its own flat layer names, so it loads a
-flattened `state_dict` whose keys match `model.state_dict()`. Convert the
-bundled TargetCall checkpoints once with:
+flattened `state_dict` whose keys match `model.state_dict()`. Original
+checkpoints store convolution weights as 3D tensors; they get the singleton
+height dimension added automatically. Convert the bundled TargetCall
+checkpoints once with:
 
 ```bash
 python -m convert_legacy TINYX011 checkpoints/TINYX011/weights_1.tar
@@ -161,13 +165,13 @@ Each model exposes the metadata needed for basecalling:
 
 ### Decoding
 
-The models return log probabilities. Turn them into a sequence with
+The models return probabilities. Turn them into a sequence with
 `fast_ctc_decode` directly, or with the same helper the basecaller uses:
 
 ```python
 from basecaller import ctc_decode
 
-scores = log_probabilities[:, 0, :]  # [time, 5] log probabilities
+scores = probabilities[0, 0]  # [time, 5] probabilities
 sequence = ctc_decode(
     scores,
     model.alphabet,

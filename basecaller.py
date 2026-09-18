@@ -20,7 +20,7 @@ from bio import CTCWriter, Writer, biofmt
 from fast5 import get_reads, get_read_groups, read_chunks
 from parallel import process_cancel, process_map
 from util import __models__, column_to_set, load_model, init
-from util import mean_qscore_from_qstring, chunk, stitch, batchify, unbatchify, permute
+from util import mean_qscore_from_qstring, chunk, stitch, batchify, unbatchify
 
 
 def basecall(model, reads, beamsize=5, chunksize=0, overlap=0, batchsize=1, qscores=False, reverse=None):
@@ -59,7 +59,7 @@ def compute_scores(model, batch):
     """
     with torch.no_grad():
         device = next(model.parameters()).device
-        chunks = batch.to(device)
+        chunks = batch.unsqueeze(2).to(device)
         if device.type == 'cuda':
             chunks = chunks.to(torch.half)
             autocast = torch.cuda.amp.autocast()
@@ -67,7 +67,7 @@ def compute_scores(model, batch):
             chunks = chunks.to(torch.float32)
             autocast = nullcontext()
         with autocast:
-            probs = permute(model(chunks), 'TNC', 'NTC')
+            probs = model(chunks)[:, 0]
 
     return probs.cpu().to(torch.float32)
 
@@ -75,7 +75,7 @@ def compute_scores(model, batch):
 def ctc_decode(x, alphabet, qscale=1.0, qbias=0.0, beamsize=5,
                threshold=1e-3, qscores=False, return_path=False):
     """Decode CTC scores without requiring a decode method on the model."""
-    x = x.exp().cpu().numpy().astype(np.float32)
+    x = x.cpu().numpy().astype(np.float32)
     if beamsize == 1 or qscores:
         seq, path = viterbi_search(x, alphabet, qscores, qscale, qbias)
     else:
