@@ -25,12 +25,30 @@ You may need to use requirements-cuda111.txt or requirements-cuda113.txt dependi
 ```bash
 $ python targetcall.py sample_data/fast5/ sample_data/Monkeypox_virus.fasta TINYX011 sample_data/
 ```
-This will create three output files under sample_data/
+This will create the following files under sample_data/
 - output.fasta: contains noisy basecalled reads of fast5 files using model TINYX011
 - output.sam: contains alignment of noisy reads to Monkeypox_virus reference.
 - readids.txt: the read IDs of reads that are accepted by the filter.
+- output_summary.tsv: per-read summary produced by the basecaller.
 
 Read IDs can be used as an input to Bonito for basecalling only the reads that are accepted by the filter using the --read-ids option.
+
+## Repository layout
+
+The source files live at the repository root; only data directories are nested.
+
+```
+targetcall.py           end-to-end filtering pipeline
+bonito.py               basecaller CLI entry point (`python -m bonito`)
+basecaller.py           basecalling and CTC decoding
+inference.py            model registry and loaders
+default.py, tinyx*.py   explicit per-model networks
+util.py, bio.py, ...    basecalling support modules
+convert_legacy.py       converts original checkpoints to flattened weights
+checkpoints/            model weights
+sample_data/            example reads and reference
+tools/minimap2          bundled aligner
+```
 
 ## Provided Models
 
