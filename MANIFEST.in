@@ -1,5 +1,0 @@
-include README.md
-include LICENCE.txt
-include requirements*.txt
-include bonito/data/README.md
-include bonito/models/README.md

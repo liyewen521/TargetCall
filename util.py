@@ -1,0 +1,405 @@
+"""
+Bonito utils
+"""
+
+import os
+import re
+import sys
+import random
+from glob import glob
+from itertools import groupby
+from operator import itemgetter
+from collections import deque, defaultdict
+from torch.utils.data import DataLoader
+
+from inference import create_model as create_inference_model
+from inference import load_weights as load_inference_weights
+from convert_legacy import flatten_legacy_state_dict
+
+import torch
+import parasail
+import numpy as np
+from torch.cuda import get_device_capability
+
+try:
+    from claragenomics.bindings import cuda
+    from claragenomics.bindings.cudapoa import CudaPoaBatch
+except ImportError:
+    pass
+
+
+__dir__ = os.path.dirname(os.path.realpath(__file__))
+__data__ = os.path.join(__dir__, "sample_data")
+__models__ = os.path.join(__dir__, "checkpoints")
+
+split_cigar = re.compile(r"(?P<len>\d+)(?P<op>\D+)")
+
+STATIC_MODEL_NAMES = {
+    "default": "default",
+    "tinynoskipx0111": "TINYX0111",
+    "tinynoskipx011": "TINYX011",
+    "tinynoskipx01": "TINYX01",
+    "tinynoskipx2": "TINYX2",
+    "tinynoskipx3": "TINYX3",
+}
+
+
+def init(seed, device):
+    """
+    Initialise random libs and setup cudnn
+
+    https://pytorch.org/docs/stable/notes/randomness.html
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if device == "cpu": return
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    assert(torch.cuda.is_available())
+
+
+def permute(x, input_layout, output_layout):
+    """
+    Permute `x` from `input_layout` to `output_layout`
+
+    >>> permute(x, 'TNC', 'NTC')
+    """
+    if input_layout == output_layout: return x
+    return x.permute(*[input_layout.index(x) for x in output_layout])
+
+
+def concat(xs, dim=0):
+    """
+    Type agnostic concat.
+    """
+    if isinstance(xs[0], torch.Tensor):
+        return torch.cat(xs, dim=dim)
+    elif isinstance(xs[0], np.ndarray):
+        return np.concatenate(xs, axis=dim)
+    elif isinstance(xs[0], list):
+        return [x for l in xs for x in l]
+    elif isinstance(xs[0], str):
+        return ''.join(xs)
+    elif isinstance(xs[0], dict):
+        return {k: concat([x[k] for x in xs], dim) for k in xs[0].keys()}
+    else:
+        raise TypeError
+
+
+def select_range(x, start, end, dim=0):
+    """
+    Type agnostic range select.
+    """
+    if isinstance(x, dict):
+        return {k: select_range(v, start, end, dim) for (k, v) in x.items()}
+    if dim == 0 or isinstance(x, list): return x[start:end]
+    return x[(*(slice(None),)*dim, slice(start, end))]
+
+
+def size(x, dim=0):
+    """
+    Type agnostic size.
+    """
+    if hasattr(x, 'shape'):
+        return x.shape[dim]
+    elif dim == 0:
+        return len(x)
+    raise TypeError
+
+
+def half_supported():
+    """
+    Returns whether FP16 is support on the GPU
+    """
+    try:
+        return get_device_capability()[0] >= 7
+    except:
+        return False
+
+
+def phred(prob, scale=1.0, bias=0.0):
+    """
+    Converts `prob` into a ascii encoded phred quality score between 0 and 40.
+    """
+    p = max(1 - prob, 1e-4)
+    q = -10 * np.log10(p) * scale + bias
+    return chr(int(np.round(q) + 33))
+
+
+def mean_qscore_from_qstring(qstring):
+    """
+    Convert qstring into a mean qscore
+    """
+    if len(qstring) == 0: return 0.0
+    qs = (np.array(qstring, 'c').view(np.uint8) - 33)
+    mean_err = np.exp(qs * (-np.log(10) / 10.)).mean()
+    return -10 * np.log10(max(mean_err, 1e-4))
+
+
+def decode_ref(encoded, labels):
+    """
+    Convert a integer encoded reference into a string and remove blanks
+    """
+    return ''.join(labels[e] for e in encoded if e)
+
+
+def column_to_set(filename, idx=0, skip_header=False):
+    """
+    Pull a column from a file and return a set of the values.
+    """
+    if filename and os.path.isfile(filename):
+        with open(filename, 'r') as tsv:
+            if skip_header:
+                next(tsv)
+            return {line.strip().split()[idx] for line in tsv.readlines()}
+
+
+def chunk(signal, chunksize, overlap):
+    """
+    Convert a read into overlapping chunks before calling
+    """
+    T = signal.shape[0]
+    if chunksize == 0:
+        chunks = signal[None, :]
+    elif T < chunksize:
+        chunks = torch.nn.functional.pad(signal, (chunksize - T, 0))[None, :]
+    else:
+        stub = (T - overlap) % (chunksize - overlap)
+        chunks = signal[stub:].unfold(0, chunksize, chunksize - overlap)
+        if stub > 0:
+            chunks = torch.cat([signal[None, :chunksize], chunks], dim=0)
+    return chunks.unsqueeze(1)
+
+
+def stitch(chunks, chunksize, overlap, length, stride, reverse=False):
+    """
+    Stitch chunks together with a given overlap
+    """
+    if chunks.shape[0] == 1: return chunks.squeeze(0)
+
+    semi_overlap = overlap // 2
+    start, end = semi_overlap // stride, (chunksize - semi_overlap) // stride
+    stub = (length - overlap) % (chunksize - overlap)
+    first_chunk_end = (stub + semi_overlap) // stride if (stub > 0) else end
+
+    if reverse:
+        chunks = list(chunks)
+        return concat([
+            chunks[-1][:-start], *(x[-end:-start] for x in reversed(chunks[1:-1])), chunks[0][-first_chunk_end:]
+        ])
+    else:
+        return concat([
+            chunks[0, :first_chunk_end], *chunks[1:-1, start:end], chunks[-1, start:]
+        ])
+
+
+def batchify(items, batchsize, dim=0):
+    """
+    Batch up items up to `batch_size`.
+    """
+    stack, pos = [], 0
+    for k, v in items:
+        breaks = range(batchsize - pos, size(v, dim), batchsize)
+        for start, end in zip([0, *breaks], [*breaks, size(v, dim)]):
+            sub_batch = select_range(v, start, end, dim)
+            stack.append(((k, (pos, pos + end - start)), sub_batch))
+            if pos + end - start == batchsize:
+                ks, vs = zip(*stack)
+                yield ks, concat(vs, dim)
+                stack, pos = [], 0
+            else:
+                pos += end - start
+
+    if len(stack):
+        ks, vs = zip(*stack)
+        yield ks, concat(vs, dim)
+
+
+def unbatchify(batches, dim=0):
+    """
+    Reconstruct batches.
+    """
+    batches = (
+        (k, select_range(v, start, end, dim))
+        for sub_batches, v in batches
+        for k, (start, end) in sub_batches
+    )
+    return (
+        (k, concat([v for (k, v) in group], dim))
+        for k, group in groupby(batches, itemgetter(0))
+    )
+
+
+def _load_inference_model(dirname, modeltype):
+    """Build a model directly from the standalone inference classes."""
+    model_name = STATIC_MODEL_NAMES.get(modeltype)
+    if model_name is None and modeltype is None:
+        directory_name = os.path.basename(os.path.normpath(dirname))
+        if directory_name in STATIC_MODEL_NAMES.values():
+            model_name = directory_name
+
+    if model_name is None:
+        available = ", ".join(STATIC_MODEL_NAMES.values())
+        raise ValueError(
+            "unsupported model '%s'; choose from: %s" % (modeltype, available)
+        )
+
+    return create_inference_model(model_name), model_name
+
+
+def load_model(
+    dirname,
+    device,
+    modeltype=None,
+    weights=None,
+    half=None,
+    chunksize=None,
+    batchsize=None,
+    overlap=None,
+    quantize=False,
+    use_koi=False,
+):
+    """
+    Load a model from disk
+    """
+    if not os.path.isdir(dirname) and os.path.isdir(os.path.join(__models__, dirname)):
+        dirname = os.path.join(__models__, dirname)
+
+    if not weights: # take the latest checkpoint
+        weight_files = glob(os.path.join(dirname, "weights_*.tar"))
+        if not weight_files:
+            raise FileNotFoundError("no model weights found in '%s'" % dirname)
+        weights = max([int(re.sub(".*_([0-9]+).tar", "\\1", w)) for w in weight_files])
+
+    device = torch.device(device)
+    weights = os.path.join(dirname, 'weights_%s.tar' % weights)
+
+    basecall_params = {
+        "chunksize": chunksize or 4000,
+        "overlap": overlap or 500,
+        "batchsize": batchsize or 64,
+        "quantize": False if quantize is None else quantize,
+    }
+    model, model_name = _load_inference_model(dirname, modeltype)
+    model.config = {"basecaller": basecall_params}
+
+    if use_koi:
+        raise ValueError(
+            "the standalone inference models do not support koi graph conversion"
+        )
+
+    state = torch.load(weights, map_location=device)
+    load_inference_weights(
+        model,
+        flatten_legacy_state_dict(model_name, state),
+        map_location=device,
+    )
+
+    if half is None:
+        half = device.type == "cuda" and half_supported()
+
+    if half: model = model.half()
+    model.eval()
+    model.to(device)
+    return model
+
+
+def parasail_to_sam(result, seq):
+    """
+    Extract reference start and sam compatible cigar string.
+
+    :param result: parasail alignment result.
+    :param seq: query sequence.
+
+    :returns: reference start coordinate, cigar string.
+    """
+    cigstr = result.cigar.decode.decode()
+    first = re.search(split_cigar, cigstr)
+
+    first_count, first_op = first.groups()
+    prefix = first.group()
+    rstart = result.cigar.beg_ref
+    cliplen = result.cigar.beg_query
+
+    clip = '' if cliplen == 0 else '{}S'.format(cliplen)
+    if first_op == 'I':
+        pre = '{}S'.format(int(first_count) + cliplen)
+    elif first_op == 'D':
+        pre = clip
+        rstart = int(first_count)
+    else:
+        pre = '{}{}'.format(clip, prefix)
+
+    mid = cigstr[len(prefix):]
+    end_clip = len(seq) - result.end_query - 1
+    suf = '{}S'.format(end_clip) if end_clip > 0 else ''
+    new_cigstr = ''.join((pre, mid, suf))
+    return rstart, new_cigstr
+
+
+def accuracy(ref, seq, balanced=False, min_coverage=0.0):
+    """
+    Calculate the accuracy between `ref` and `seq`
+    """
+    alignment = parasail.sw_trace_striped_32(seq, ref, 8, 4, parasail.dnafull)
+    counts = defaultdict(int)
+
+    q_coverage = len(alignment.traceback.query) / len(seq)
+    r_coverage = len(alignment.traceback.ref) / len(ref)
+
+    if r_coverage < min_coverage:
+        return 0.0
+
+    _, cigar = parasail_to_sam(alignment, seq)
+
+    for count, op  in re.findall(split_cigar, cigar):
+        counts[op] += int(count)
+
+    if balanced:
+        accuracy = (counts['='] - counts['I']) / (counts['='] + counts['X'] + counts['D'])
+    else:
+        accuracy = counts['='] / (counts['='] + counts['I'] + counts['X'] + counts['D'])
+    return accuracy * 100
+
+
+def print_alignment(ref, seq):
+    """
+    Print the alignment between `ref` and `seq`
+    """
+    alignment = parasail.sw_trace_striped_32(seq, ref, 8, 4, parasail.dnafull)
+    print(alignment.traceback.ref)
+    print(alignment.traceback.comp)
+    print(alignment.traceback.query)
+
+    print("  Score=%s" % alignment.score)
+    return alignment.score
+
+
+def poa(groups, max_poa_sequences=100, gpu_mem_per_batch=0.9):
+    """
+    Generate consensus for POA groups.
+
+    Args:
+        groups : A list of lists of sequences for which consensus is to be generated.
+    """
+    free, total = cuda.cuda_get_mem_info(cuda.cuda_get_device())
+    gpu_mem_per_batch *= free
+    batch = CudaPoaBatch(max_poa_sequences, gpu_mem_per_batch, stream=None, output_type="consensus")
+    results = []
+
+    for i, group in enumerate(groups, start=1):
+        group_status, seq_status = batch.add_poa_group(group)
+
+        # Once batch is full, run POA processing
+        if group_status == 1 or i == len(groups):
+            batch.generate_poa()
+
+            consensus, coverage, status = batch.get_consensus()
+            results.extend(consensus)
+
+            batch.reset()
+            group_status, seq_status = batch.add_poa_group(group)
+
+    return results

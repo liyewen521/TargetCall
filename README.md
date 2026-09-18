@@ -16,7 +16,6 @@ $ conda create --name targetcall python=3.8.10
 $ conda activate targetcall
 (targetcall) $ pip install --upgrade pip
 (targetcall) $ pip install -r requirements.txt
-(targetcall) $ python setup.py develop
 ```
 
 You may need to use requirements-cuda111.txt or requirements-cuda113.txt depending on your cuda version.
@@ -24,10 +23,9 @@ You may need to use requirements-cuda111.txt or requirements-cuda113.txt dependi
 ## Usage
 
 ```bash
-$ cd src
-$ python targetcall.py ../sample_data/fast5/ ../sample_data/Monkeypox_virus.fasta TINYX011 ../sample_data/
+$ python targetcall.py sample_data/fast5/ sample_data/Monkeypox_virus.fasta TINYX011 sample_data/
 ```
-This will create three output files under ../sample_data/
+This will create three output files under sample_data/
 - output.fasta: contains noisy basecalled reads of fast5 files using model TINYX011
 - output.sam: contains alignment of noisy reads to Monkeypox_virus reference.
 - readids.txt: the read IDs of reads that are accepted by the filter.
@@ -36,7 +34,7 @@ Read IDs can be used as an input to Bonito for basecalling only the reads that a
 
 ## Provided Models
 
-You can find all models listed under bonito/models/.
+All models are stored under `checkpoints/`.
 
 | Model Name  | Model Name in the Paper | # of Parameters  | Basecalling Accuracy |
 | ------------- | ------------- | ------------- | ------------- |
@@ -49,23 +47,19 @@ You can find all models listed under bonito/models/.
 
 ## Standalone inference models
 
-[`model_inference/`](./model_inference) is a self-contained PyTorch package with
-one file per model. Every convolution and batch-norm layer is written out
-explicitly in the model's `__init__` and called in order in `forward`; there are
-no block wrappers or generated layer specs. The package only depends on
-PyTorch: it does not import Bonito and does not read `config.toml`.
+Each model has its own file and declares every convolution and batch-norm layer
+explicitly in `__init__` and `forward`; there are no block wrappers or generated
+layer specs. These modules only depend on PyTorch: they do not import the
+basecalling code and do not read `config.toml`.
 
 | File | Class | Model name |
 | --- | --- | --- |
-| `model_inference/default.py` | `DefaultModel` | `default` |
-| `model_inference/tinyx0111.py` | `TinyX0111Model` | `TINYX0111` |
-| `model_inference/tinyx011.py` | `TinyX011Model` | `TINYX011` |
-| `model_inference/tinyx01.py` | `TinyX01Model` | `TINYX01` |
-| `model_inference/tinyx2.py` | `TinyX2Model` | `TINYX2` |
-| `model_inference/tinyx3.py` | `TinyX3Model` | `TINYX3` |
-
-The TargetCall application uses these classes directly, so its model loading and
-basecalling path no longer reads model architecture from `config.toml`.
+| `default.py` | `DefaultModel` | `default` |
+| `tinyx0111.py` | `TinyX0111Model` | `TINYX0111` |
+| `tinyx011.py` | `TinyX011Model` | `TINYX011` |
+| `tinyx01.py` | `TinyX01Model` | `TINYX01` |
+| `tinyx2.py` | `TinyX2Model` | `TINYX2` |
+| `tinyx3.py` | `TinyX3Model` | `TINYX3` |
 
 ### Requirements
 
@@ -78,11 +72,11 @@ sequence additionally requires `fast_ctc_decode` (installed by
 ```python
 import torch
 
-from model_inference import load_model
+from inference import load_model
 
 model = load_model(
     "TINYX011",
-    "model_inference/weights/TINYX011.pt",
+    "checkpoints/TINYX011.pt",
     device="cpu",
 )
 
@@ -95,14 +89,14 @@ with torch.no_grad():
 - Output layout: `[time, batch, 5]` log probabilities, where
   `time = (samples - 1) // stride + 1` and `stride` is `3`.
 - Supported names: `default`, `TINYX0111`, `TINYX011`, `TINYX01`, `TINYX2`,
-  `TINYX3` (the same names listed in the table above).
+  `TINYX3`.
 - Calling `load_model("TINYX011")` without a path defaults to
-  `model_inference/weights/TINYX011.pt`.
+  `checkpoints/TINYX011.pt`.
 
 ### Building a model without weights
 
 ```python
-from model_inference import create_model
+from inference import create_model
 
 model = create_model("TINYX3")
 ```
@@ -116,27 +110,26 @@ flattened `state_dict` whose keys match `model.state_dict()`. Convert the
 bundled TargetCall checkpoints once with:
 
 ```bash
-python -m model_inference.convert_legacy TINYX011 \
-    bonito/models/TINYX011/weights_1.tar
-# writes model_inference/weights/TINYX011.pt
+python -m convert_legacy TINYX011 checkpoints/TINYX011/weights_1.tar
+# writes checkpoints/TINYX011.pt
 ```
 
 Then load the flattened file:
 
 ```python
-from model_inference import create_model, load_weights
+from inference import create_model, load_weights
 
 model = create_model("TINYX011")
-load_weights(model, "model_inference/weights/TINYX011.pt")
+load_weights(model, "checkpoints/TINYX011.pt")
 ```
 
 `load_weights` also accepts an in-memory state dict. Checkpoints wrapped in a
 `state_dict` or `model_state_dict` mapping, and keys prefixed with `module.`,
 are unwrapped automatically. Pass `strict=False` to allow extra keys.
 
-The Bonito application adapter (`bonito.util.load_model`) still understands the
-bundled `.tar` checkpoints and converts them on the fly, so no manual step is
-needed when running the basecaller.
+The basecalling adapter (`util.load_model`) still understands the bundled `.tar`
+checkpoints and converts them on the fly, so no manual step is needed when
+running the basecaller.
 
 ### Model attributes
 
@@ -154,7 +147,7 @@ The models return log probabilities. Turn them into a sequence with
 `fast_ctc_decode` directly, or with the same helper the basecaller uses:
 
 ```python
-from bonito.ctc.basecall import ctc_decode
+from basecall import ctc_decode
 
 scores = log_probabilities[:, 0, :]  # [time, 5] log probabilities
 sequence = ctc_decode(
@@ -174,26 +167,12 @@ quality string and move path.
 The application path (`bonito basecaller`) loads the same classes:
 
 ```bash
-python -m bonito basecaller bonito/models/TINYX011 reads/ \
+python -m bonito basecaller checkpoints/TINYX011 reads/ \
     --modeltype tinynoskipx011 --device cuda:0 --batchsize 3200
 ```
 
 `--modeltype` maps to the standalone classes as `default`, `tinynoskipx0111`,
 `tinynoskipx011`, `tinynoskipx01`, `tinynoskipx2`, and `tinynoskipx3`.
-
-### Tests
-
-```bash
-PYTHONPATH=. python test/test_static_models.py
-```
-
-The tests verify that the application loads a model without calling
-`toml.load`, and that each explicit model matches the original config-based
-model bit-for-bit.
-
-## Reproducing the results in the paper
-
-We explain how to reproduce the results we show in the TargetCall paper in the [test directory](./test/).
 
 # <a name="cite"></a>Citing TargetCall
 
