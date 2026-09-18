@@ -5,29 +5,113 @@ Bonito Basecaller
 import os
 import sys
 import numpy as np
+import torch
 from tqdm import tqdm
 from time import perf_counter
 from functools import partial
+from contextlib import nullcontext
 from datetime import timedelta
 from itertools import islice as take
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from fast_ctc_decode import beam_search, viterbi_search
 
 from aligner import align_map, Aligner
 from bio import CTCWriter, Writer, biofmt
-from download import File, models, __models__
 from fast5 import get_reads, get_read_groups, read_chunks
-from parallel import process_cancel, process_itemmap
-from basecall import basecall
-from util import column_to_set, load_model, init
+from parallel import process_cancel, process_map
+from util import __models__, column_to_set, load_model, init
+from util import mean_qscore_from_qstring, chunk, stitch, batchify, unbatchify, permute
+
+
+def basecall(model, reads, beamsize=5, chunksize=0, overlap=0, batchsize=1, qscores=False, reverse=None):
+    """
+    Basecalls a set of reads.
+    """
+    chunks = (
+        (read, chunk(torch.tensor(read.signal), chunksize, overlap)) for read in reads
+    )
+    scores = unbatchify(
+        (k, compute_scores(model, v)) for k, v in batchify(chunks, batchsize)
+    )
+    scores = (
+        (read, {'scores': stitch(v, chunksize, overlap, len(read.signal), model.stride)}) for read, v in scores
+    )
+    decode_scores = partial(
+        ctc_decode,
+        alphabet=model.alphabet,
+        qscale=model.qscale,
+        qbias=model.qbias,
+    )
+    decoder = partial(
+        decode,
+        decode=decode_scores,
+        beamsize=beamsize,
+        qscores=qscores,
+        stride=model.stride,
+    )
+    basecalls = process_map(decoder, scores, n_proc=4)
+    return basecalls
+
+
+def compute_scores(model, batch):
+    """
+    Compute scores for model.
+    """
+    with torch.no_grad():
+        device = next(model.parameters()).device
+        chunks = batch.to(device)
+        if device.type == 'cuda':
+            chunks = chunks.to(torch.half)
+            autocast = torch.cuda.amp.autocast()
+        else:
+            chunks = chunks.to(torch.float32)
+            autocast = nullcontext()
+        with autocast:
+            probs = permute(model(chunks), 'TNC', 'NTC')
+
+    return probs.cpu().to(torch.float32)
+
+
+def ctc_decode(x, alphabet, qscale=1.0, qbias=0.0, beamsize=5,
+               threshold=1e-3, qscores=False, return_path=False):
+    """Decode CTC scores without requiring a decode method on the model."""
+    x = x.exp().cpu().numpy().astype(np.float32)
+    if beamsize == 1 or qscores:
+        seq, path = viterbi_search(x, alphabet, qscores, qscale, qbias)
+    else:
+        seq, path = beam_search(x, alphabet, beamsize, threshold)
+    if return_path:
+        return seq, path
+    return seq
+
+
+def decode(scores, decode, beamsize=5, qscores=False, stride=1):
+    """
+    Convert the network scores into a sequence.
+    """
+    # do a greedy decode to get a sensible qstring to compute the mean qscore from
+    seq, path = decode(scores['scores'], beamsize=1, qscores=True, return_path=True)
+    seq, qstring = seq[:len(path)], seq[len(path):]
+    mean_qscore = mean_qscore_from_qstring(qstring)
+
+    # beam search will produce a better sequence but doesn't produce a sensible qstring/path
+    if not (qscores or beamsize == 1):
+        try:
+            seq = decode(scores['scores'], beamsize=beamsize)
+            path = None
+            qstring = '*'
+        except:
+            pass
+    sig_move = None
+    if path is not None:
+        sig_move = np.full(path.size * stride, False)
+        sig_move[np.where(path)[0] * stride] = True
+    return {'sequence': seq, 'qstring': qstring, 'mean_qscore': mean_qscore, 'path': path, 'sig_move': sig_move}
 
 
 def main(args):
 
     init(args.seed, args.device)
-
-    if args.model_directory in models and args.model_directory not in os.listdir(__models__):
-        sys.stderr.write("> downloading model\n")
-        File(__models__, models[args.model_directory]).download()
 
     sys.stderr.write(f"> loading model {args.model_directory}\n")
     try:
@@ -40,26 +124,17 @@ def main(args):
             overlap=args.overlap,
             batchsize=args.batchsize,
             quantize=args.quantize,
-            use_koi=False,
         )
     except FileNotFoundError:
         sys.stderr.write(f"> error: failed to load {args.model_directory}\n")
         sys.stderr.write(f"> available models:\n")
-        for model in sorted(models): sys.stderr.write(f" - {model}\n")
+        if os.path.isdir(__models__):
+            for model in sorted(os.listdir(__models__)):
+                sys.stderr.write(f" - {model}\n")
         exit(1)
 
     if args.verbose:
         sys.stderr.write(f"> model basecaller params: {model.config['basecaller']}\n")
-
-    mods_model = None
-    if args.modified_base_model is not None or args.modified_bases is not None:
-        from mod_util import call_mods, load_mods_model
-
-        sys.stderr.write("> loading modified base model\n")
-        mods_model = load_mods_model(
-            args.modified_bases, args.model_directory, args.modified_base_model
-        )
-        sys.stderr.write(f"> {mods_model[1]['alphabet_str']}\n")
 
     if args.reference:
         sys.stderr.write("> loading reference\n")
@@ -123,8 +198,6 @@ def main(args):
         overlap=model.config["basecaller"]["overlap"]
     )
 
-    if mods_model is not None:
-        results = process_itemmap(partial(call_mods, mods_model), results)
     if aligner:
         results = align_map(aligner, results)
 
@@ -154,8 +227,6 @@ def argparser():
     parser.add_argument("model_directory")
     parser.add_argument("reads_directory")
     parser.add_argument("--reference")
-    parser.add_argument("--modified-bases", nargs="+")
-    parser.add_argument("--modified-base-model")
     parser.add_argument("--read-ids")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", default=25, type=int)

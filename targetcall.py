@@ -1,6 +1,7 @@
 """Run the TargetCall filtering pipeline."""
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -28,9 +29,39 @@ def parse_args():
     return parser.parse_args()
 
 
+def fastq_to_fasta(fastq_path, fasta_path):
+    """Write the sequence and quality header lines of a FASTQ as FASTA."""
+    with open(fastq_path) as fastq_file, open(fasta_path, "w") as fasta_file:
+        for index, line in enumerate(fastq_file):
+            if index % 4 in (0, 1):
+                fasta_file.write(line.strip() + "\n")
+    os.remove(fastq_path)
+
+
+def extract_filtered(sam_path, readids_path):
+    """Write the read IDs of reads that aligned to the reference."""
+    is_paf = str(sam_path).endswith(".paf")
+    alignments = {}
+    with open(sam_path) as sam_file:
+        for line in sam_file:
+            if line.startswith("@"):
+                continue
+            words = line.split()
+            if not words:
+                continue
+            if words[0] not in alignments:
+                alignments[words[0]] = "not aligned"
+            reference = words[5] if is_paf else words[2]
+            if reference != "*":
+                alignments[words[0]] = "aligned"
+    with open(readids_path, "w") as readids_file:
+        for read_id, status in alignments.items():
+            if status == "aligned":
+                readids_file.write(read_id + "\n")
+
+
 def run(args):
     repository = Path(__file__).resolve().parent
-    script_directory = repository
     model_directory = repository / "checkpoints" / args.model
     output_directory = Path(args.output_directory).resolve()
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -68,12 +99,9 @@ def run(args):
             check=True,
         )
 
-    fasta_command = [
-        sys.executable,
-        str(script_directory / "fastq_to_fasta.py"),
-        str(fastq_path),
-        str(fasta_path),
-    ]
+    print("\nfastq_to_fasta {} {}".format(fastq_path, fasta_path))
+    fastq_to_fasta(fastq_path, fasta_path)
+
     alignment_command = [
         "minimap2",
         "-a",
@@ -84,22 +112,12 @@ def run(args):
         str(Path(args.reference).resolve()),
         str(fasta_path),
     ]
-    filtering_command = [
-        sys.executable,
-        str(script_directory / "extract_filtered.py"),
-        str(sam_path),
-        str(readids_path),
-    ]
-
-    print("\n" + " ".join(fasta_command))
-    subprocess.run(fasta_command, check=True)
-
     print("\n" + " ".join(alignment_command))
     with sam_path.open("w") as sam_file:
         subprocess.run(alignment_command, stdout=sam_file, check=True)
 
-    print("\n" + " ".join(filtering_command))
-    subprocess.run(filtering_command, check=True)
+    print("\nextract_filtered {} {}".format(sam_path, readids_path))
+    extract_filtered(sam_path, readids_path)
 
 
 if __name__ == "__main__":

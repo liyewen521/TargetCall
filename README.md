@@ -147,7 +147,7 @@ The models return log probabilities. Turn them into a sequence with
 `fast_ctc_decode` directly, or with the same helper the basecaller uses:
 
 ```python
-from basecall import ctc_decode
+from basecaller import ctc_decode
 
 scores = log_probabilities[:, 0, :]  # [time, 5] log probabilities
 sequence = ctc_decode(

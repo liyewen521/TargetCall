@@ -17,12 +17,17 @@ import numpy as np
 from pysam import AlignmentFile, AlignmentHeader, AlignedSegment
 
 import bonito
-from convert import typical_indices
 from util import mean_qscore_from_qstring
 
 
 logger = getLogger('bonito')
 Format = namedtuple("Format", "aligned name mode")
+
+
+def typical_indices(x, n=2.5):
+    mu, sd = np.mean(x), np.std(x)
+    idx, = np.where((mu - n * sd < x) & (x < mu + n * sd))
+    return idx
 
 __ont_bam_spec__ = "0.0.1"
 

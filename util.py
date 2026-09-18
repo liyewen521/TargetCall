@@ -259,7 +259,6 @@ def load_model(
     batchsize=None,
     overlap=None,
     quantize=False,
-    use_koi=False,
 ):
     """
     Load a model from disk
@@ -284,11 +283,6 @@ def load_model(
     }
     model, model_name = _load_inference_model(dirname, modeltype)
     model.config = {"basecaller": basecall_params}
-
-    if use_koi:
-        raise ValueError(
-            "the standalone inference models do not support koi graph conversion"
-        )
 
     state = torch.load(weights, map_location=device)
     load_inference_weights(
