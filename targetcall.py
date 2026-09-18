@@ -102,8 +102,10 @@ def run(args):
     print("\nfastq_to_fasta {} {}".format(fastq_path, fasta_path))
     fastq_to_fasta(fastq_path, fasta_path)
 
+    bundled_minimap2 = repository / "tools" / "minimap2"
+    minimap2 = str(bundled_minimap2) if bundled_minimap2.exists() else "minimap2"
     alignment_command = [
-        "minimap2",
+        minimap2,
         "-a",
         "-x",
         "map-ont",

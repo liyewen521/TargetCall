@@ -4,7 +4,7 @@ TargetCall is the first pre-basecalling filter that is applicable to a wide rang
 
 ## Prerequisites
 
-TargetCall requires minimap2 to be installed. Minimap2 can be installed via [Minimap2 (v2.24)](https://github.com/lh3/minimap2/releases/tag/v2.24)
+A minimap2 binary is bundled at [`tools/minimap2`](./tools/minimap2) (v2.24) and is used automatically by `targetcall.py`. Alternatively, install [Minimap2 (v2.24)](https://github.com/lh3/minimap2/releases/tag/v2.24) and put it on your `PATH`.
 
 ## Installation
 TargetCall is tested on Linux with conda version 4.7.12.
