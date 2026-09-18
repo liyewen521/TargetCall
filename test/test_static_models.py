@@ -16,7 +16,7 @@ class StaticModelTest(unittest.TestCase):
         model_dir = os.path.join(models_root, 'TINYX3')
 
         with patch(
-            'bonito.util.toml.load',
+            'toml.load',
             side_effect=AssertionError('application must not read model TOML'),
         ):
             model = load_application_model(

@@ -9,15 +9,13 @@ import random
 from glob import glob
 from itertools import groupby
 from operator import itemgetter
-from importlib import import_module
-from collections import deque, defaultdict, OrderedDict
+from collections import deque, defaultdict
 from torch.utils.data import DataLoader
 
 from model_inference import create_model as create_inference_model
 from model_inference import load_weights as load_inference_weights
 from model_inference.convert_legacy import flatten_legacy_state_dict
 
-import toml
 import torch
 import parasail
 import numpy as np
@@ -33,11 +31,9 @@ except ImportError:
 __dir__ = os.path.dirname(os.path.realpath(__file__))
 __data__ = os.path.join(__dir__, "data")
 __models__ = os.path.join(__dir__, "models")
-__configs__ = os.path.join(__dir__, "models/configs")
 
 split_cigar = re.compile(r"(?P<len>\d+)(?P<op>\D+)")
 default_data = os.path.join(__data__, "dna_r9.4.1")
-default_config = os.path.join(__configs__, "dna_r9.4.1@v3.1.toml")
 
 STATIC_MODEL_NAMES = {
     "default": "default",
@@ -235,32 +231,6 @@ def unbatchify(batches, dim=0):
         (k, concat([v for (k, v) in group], dim))
         for k, group in groupby(batches, itemgetter(0))
     )
-
-
-def load_symbol(config, symbol):
-    """
-    Dynamic load a symbol from module specified in model config.
-    """
-    if not isinstance(config, dict):
-        if not os.path.isdir(config) and os.path.isdir(os.path.join(__models__, config)):
-            dirname = os.path.join(__models__, config)
-        else:
-            dirname = config
-        config = toml.load(os.path.join(dirname, 'config.toml'))
-    imported = import_module(config['model']['package'])
-    return getattr(imported, symbol)
-
-
-def match_names(state_dict, model):
-    keys_and_shapes = lambda state_dict: zip(*[
-        (k, s) for s, i, k in sorted([(v.shape, i, k)
-        for i, (k, v) in enumerate(state_dict.items())])
-    ])
-    k1, s1 = keys_and_shapes(state_dict)
-    k2, s2 = keys_and_shapes(model.state_dict())
-    assert s1 == s2
-    remap = dict(zip(k1, k2))
-    return OrderedDict([(k, remap[k]) for k in state_dict.keys()])
 
 
 def _load_inference_model(dirname, modeltype):
