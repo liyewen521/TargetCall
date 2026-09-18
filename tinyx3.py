@@ -250,9 +250,8 @@ class TinyX3Model(nn.Module):
         x = self.bn28(x)
         x = F.relu(x)
         x = F.dropout(x, p=0.05, training=self.training)
-        x = self.decoder(x)
-        batch, channels, _, length = x.shape
-        x = x.reshape(batch, channels, length)
-        x = x.permute(0, 2, 1)
-        x = x.reshape(batch, 1, length, channels)
-        return F.softmax(x, dim=-1)
+        x = self.decoder(x)          # [B, 5, 1, T]
+        x = x.squeeze(2)             # [B, 5, T]
+        x = x.transpose(1, 2)        # [B, T, 5]
+        x = x.unsqueeze(1)           # [B, 1, T, 5] (NDWC)
+        return F.softmax(x, dim=3)
