@@ -1,14 +1,11 @@
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-from bonito.cli import basecaller, train, evaluate, view, convert, download, export
-
-modules = [
-    'basecaller', 'train', 'evaluate', 'view', 'convert', 'download', 'export'
-]
 
 __version__ = '0.5.0'
 
 
 def main():
+    from bonito.cli import basecaller
+
     parser = ArgumentParser(
         'bonito',
         formatter_class=ArgumentDefaultsHelpFormatter
@@ -25,10 +22,11 @@ def main():
     )
     subparsers.required = True
 
-    for module in modules:
-        mod = globals()[module]
-        p = subparsers.add_parser(module, parents=[mod.argparser()])
-        p.set_defaults(func=mod.main)
+    basecaller_parser = subparsers.add_parser(
+        'basecaller',
+        parents=[basecaller.argparser()],
+    )
+    basecaller_parser.set_defaults(func=basecaller.main)
 
     args = parser.parse_args()
     args.func(args)

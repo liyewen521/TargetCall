@@ -47,29 +47,34 @@ You can find all models listed under bonito/models/.
 | TINYX2  | LC-Main/4 | 52K  | 80.82%  |
 | TINYX3  | LC-Main/8  | 21K  | 70.42%  |
 
-### Direct model construction
+### Single-file model
 
-The bundled CTC networks can be constructed directly without parsing a
-`config.toml` architecture:
+[`model.py`](./model.py) is a standalone inference file
+that only depends on PyTorch. It contains the six supported model classes,
+their primitive `Conv1d` and `BatchNorm1d` layers, the forward pass, and a
+loader for the original TargetCall weights. It does not import Bonito or read
+TOML files.
 
 ```python
 import torch
 
-from bonito.ctc import DefaultModel, TinyX011Model
+from model import load_model
 
-default_model = DefaultModel()
-tiny_model = TinyX011Model()
-
-weights = torch.load(
+model = load_model(
+    "TINYX011",
     "bonito/models/TINYX011/weights_1.tar",
-    map_location="cpu",
 )
-tiny_model.load_state_dict(weights, strict=True)
-tiny_model.eval()
+
+signal = torch.randn(1, 1, 4000)
+with torch.no_grad():
+    log_probabilities = model(signal)
 ```
 
-For name-based selection, use `create_model("default")` or one of
-`TINYX0111`, `TINYX011`, `TINYX01`, `TINYX2`, and `TINYX3`.
+The model input layout is `[batch, 1, samples]`; its output layout is
+`[time, batch, 5]` and contains log probabilities.
+
+The TargetCall application uses these classes directly. Its model loading and
+basecalling path no longer reads model architecture from `config.toml`.
 
 ## Reproducing the results in the paper
 

@@ -1,52 +1,106 @@
-import os
-import sys 
+"""Run the TargetCall filtering pipeline."""
 
-read_dir_path = sys.argv[1]
-ref_path = sys.argv[2]
-model_name = sys.argv[3]
-out_dir_path = sys.argv[4]
-
-batch=0
-modeltype = ''
-
-if model_name == "default":
-    batch=512
-    modeltype = 'default'
-    
-elif model_name == "TINYX1":
-    batch=1600
-    modeltype = 'tinynoskipx1'
-
-elif model_name == "TINYX011":
-    batch=3200
-    modeltype = 'tinynoskipx011'
-
-elif model_name == "TINYX01":
-    batch=6400
-    modeltype = 'tinynoskipx01'
-    
-elif model_name == "TINYX2":
-    batch=12800
-    modeltype = 'tinynoskipx2'
-
-elif model_name == "TINYX3":
-    batch=25600
-    modeltype = 'tinynoskipx3'
-
-elif model_name == "TINYX4":
-    batch=51200
-    modeltype = 'tinynoskipx4'
+import argparse
+import subprocess
+import sys
+from pathlib import Path
 
 
-model_path = '../bonito/models/' + model_name + '/'
+MODEL_SETTINGS = {
+    "default": (512, "default"),
+    "TINYX0111": (1600, "tinynoskipx0111"),
+    "TINYX011": (3200, "tinynoskipx011"),
+    "TINYX01": (6400, "tinynoskipx01"),
+    "TINYX2": (12800, "tinynoskipx2"),
+    "TINYX3": (25600, "tinynoskipx3"),
+}
 
 
-print("\nbonito basecaller " + model_path + " " + read_dir_path + "/ --batchsize " + str(batch) + " --modeltype " + modeltype + " > " + out_dir_path + '/output.fastq')
-os.system("bonito basecaller " + model_path + " " + read_dir_path + "/ --batchsize " + str(batch) +" --modeltype "+ modeltype + " > " + out_dir_path + '/output.fastq')
-print("\npython fastq_to_fasta.py " + out_dir_path +  '/output.fastq ' + out_dir_path + '/output.fasta ')
-os.system("python fastq_to_fasta.py " + out_dir_path + '/output.fastq ' + out_dir_path + '/output.fasta ')
-print("\nminimap2 -a -x map-ont -t 16 " + ref_path + " " + out_dir_path + '/output.fasta ' + " > " + out_dir_path + '/output.sam ')
-os.system("minimap2 -a -x map-ont -t 16 " + ref_path + " " + out_dir_path + '/output.fasta ' + " > " + out_dir_path + '/output.sam ')
-print("\npython extract_filtered.py " + out_dir_path + '/output.sam ' + out_dir_path + '/readids.txt ')
-os.system("python extract_filtered.py " + out_dir_path + '/output.sam ' + out_dir_path + '/readids.txt ')
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("reads_directory")
+    parser.add_argument("reference")
+    parser.add_argument("model", choices=MODEL_SETTINGS)
+    parser.add_argument("output_directory")
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--batchsize", type=int)
+    parser.add_argument("--max-reads", type=int, default=0)
+    return parser.parse_args()
 
+
+def run(args):
+    repository = Path(__file__).resolve().parent.parent
+    script_directory = repository / "src"
+    model_directory = repository / "bonito" / "models" / args.model
+    output_directory = Path(args.output_directory).resolve()
+    output_directory.mkdir(parents=True, exist_ok=True)
+
+    default_batchsize, modeltype = MODEL_SETTINGS[args.model]
+    batchsize = args.batchsize or default_batchsize
+    fastq_path = output_directory / "output.fastq"
+    fasta_path = output_directory / "output.fasta"
+    sam_path = output_directory / "output.sam"
+    readids_path = output_directory / "readids.txt"
+
+    basecaller_command = [
+        sys.executable,
+        "-m",
+        "bonito",
+        "basecaller",
+        str(model_directory),
+        str(Path(args.reads_directory).resolve()),
+        "--batchsize",
+        str(batchsize),
+        "--modeltype",
+        modeltype,
+        "--device",
+        args.device,
+    ]
+    if args.max_reads:
+        basecaller_command.extend(["--max-reads", str(args.max_reads)])
+
+    print("\n" + " ".join(basecaller_command))
+    with fastq_path.open("w") as fastq_file:
+        subprocess.run(
+            basecaller_command,
+            cwd=repository,
+            stdout=fastq_file,
+            check=True,
+        )
+
+    fasta_command = [
+        sys.executable,
+        str(script_directory / "fastq_to_fasta.py"),
+        str(fastq_path),
+        str(fasta_path),
+    ]
+    alignment_command = [
+        "minimap2",
+        "-a",
+        "-x",
+        "map-ont",
+        "-t",
+        "16",
+        str(Path(args.reference).resolve()),
+        str(fasta_path),
+    ]
+    filtering_command = [
+        sys.executable,
+        str(script_directory / "extract_filtered.py"),
+        str(sam_path),
+        str(readids_path),
+    ]
+
+    print("\n" + " ".join(fasta_command))
+    subprocess.run(fasta_command, check=True)
+
+    print("\n" + " ".join(alignment_command))
+    with sam_path.open("w") as sam_file:
+        subprocess.run(alignment_command, stdout=sam_file, check=True)
+
+    print("\n" + " ".join(filtering_command))
+    subprocess.run(filtering_command, check=True)
+
+
+if __name__ == "__main__":
+    run(parse_args())

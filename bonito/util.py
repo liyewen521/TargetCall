@@ -13,9 +13,11 @@ from importlib import import_module
 from collections import deque, defaultdict, OrderedDict
 from torch.utils.data import DataLoader
 
+from model import create_model as create_inference_model
+from model import load_weights as load_inference_weights
+
 import toml
 import torch
-import koi.lstm
 import parasail
 import numpy as np
 from torch.cuda import get_device_capability
@@ -38,13 +40,11 @@ default_config = os.path.join(__configs__, "dna_r9.4.1@v3.1.toml")
 
 STATIC_MODEL_NAMES = {
     "default": "default",
-    "tinynoskipx1": "TINYX1",
     "tinynoskipx0111": "TINYX0111",
     "tinynoskipx011": "TINYX011",
     "tinynoskipx01": "TINYX01",
     "tinynoskipx2": "TINYX2",
     "tinynoskipx3": "TINYX3",
-    "tinynoskipx4": "TINYX4",
 }
 
 
@@ -262,8 +262,8 @@ def match_names(state_dict, model):
     return OrderedDict([(k, remap[k]) for k in state_dict.keys()])
 
 
-def _load_static_model(dirname, modeltype):
-    """Build a bundled CTC model without using its TOML architecture."""
+def _load_inference_model(dirname, modeltype):
+    """Build a model directly from the standalone inference classes."""
     model_name = STATIC_MODEL_NAMES.get(modeltype)
     if model_name is None and modeltype is None:
         directory_name = os.path.basename(os.path.normpath(dirname))
@@ -271,13 +271,26 @@ def _load_static_model(dirname, modeltype):
             model_name = directory_name
 
     if model_name is None:
-        return None
+        available = ", ".join(STATIC_MODEL_NAMES.values())
+        raise ValueError(
+            "unsupported model '%s'; choose from: %s" % (modeltype, available)
+        )
 
-    ctc = import_module("bonito.ctc")
-    return ctc.create_model(model_name)
+    return create_inference_model(model_name)
 
 
-def load_model(dirname, device,modeltype=None, weights=None, half=None, chunksize=None, batchsize=None, overlap=None, quantize=False, use_koi=False):
+def load_model(
+    dirname,
+    device,
+    modeltype=None,
+    weights=None,
+    half=None,
+    chunksize=None,
+    batchsize=None,
+    overlap=None,
+    quantize=False,
+    use_koi=False,
+):
     """
     Load a model from disk
     """
@@ -291,50 +304,26 @@ def load_model(dirname, device,modeltype=None, weights=None, half=None, chunksiz
         weights = max([int(re.sub(".*_([0-9]+).tar", "\\1", w)) for w in weight_files])
 
     device = torch.device(device)
-    config = toml.load(os.path.join(dirname, 'config.toml'))
     weights = os.path.join(dirname, 'weights_%s.tar' % weights)
 
-    basecall_params = config.get("basecaller", {})
-    # use `value or dict.get(key)` rather than `dict.get(key, value)` to make
-    # flags override values in config
-    chunksize = basecall_params["chunksize"] = chunksize or basecall_params.get("chunksize", 4000)
-    overlap = basecall_params["overlap"] = overlap or basecall_params.get("overlap", 500)
-    batchsize = basecall_params["batchsize"] = batchsize or basecall_params.get("batchsize", 64)
-    quantize = basecall_params["quantize"] = basecall_params.get("quantize") if quantize is None else quantize
-    config["basecaller"] = basecall_params
-
-    model = _load_static_model(dirname, modeltype)
-    if model is not None:
-        model.config = config
-        if 'qscore' in config:
-            model.qbias = config['qscore']['bias']
-            model.qscale = config['qscore']['scale']
-    elif modeltype == "onlyb1":
-        model = load_symbol(config, 'ModelB1')(config)
-    elif modeltype == "onlyb1b2":
-        model = load_symbol(config, 'ModelB1B2')(config)
-    elif modeltype == "onlyb1x2":
-        model = load_symbol(config, 'ModelB1X2')(config)
-    else:
-        Model = load_symbol(config, "Model")
-        model = Model(config)
+    basecall_params = {
+        "chunksize": chunksize or 4000,
+        "overlap": overlap or 500,
+        "batchsize": batchsize or 64,
+        "quantize": False if quantize is None else quantize,
+    }
+    model = _load_inference_model(dirname, modeltype)
+    model.config = {"basecaller": basecall_params}
 
     if use_koi:
-        model.encoder = koi.lstm.update_graph(
-            model.encoder, batchsize=batchsize, chunksize=chunksize // model.stride, quantize=quantize
+        raise ValueError(
+            "the standalone inference models do not support koi graph conversion"
         )
 
-    state_dict = torch.load(weights, map_location=device)
-    state_dict = {k2: state_dict[k1] for k1, k2 in match_names(state_dict, model).items()}
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k.replace('module.', '')
-        new_state_dict[name] = v
-
-    model.load_state_dict(new_state_dict)
+    load_inference_weights(model, weights, map_location=device)
 
     if half is None:
-        half = half_supported()
+        half = device.type == "cuda" and half_supported()
 
     if half: model = model.half()
     model.eval()

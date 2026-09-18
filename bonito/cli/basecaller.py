@@ -14,11 +14,11 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from bonito.aligner import align_map, Aligner
 from bonito.io import CTCWriter, Writer, biofmt
-from bonito.mod_util import call_mods, load_mods_model
 from bonito.cli.download import File, models, __models__
 from bonito.fast5 import get_reads, get_read_groups, read_chunks
 from bonito.multiprocessing import process_cancel, process_itemmap
-from bonito.util import column_to_set, load_symbol, load_model, init
+from bonito.ctc.basecall import basecall
+from bonito.util import column_to_set, load_model, init
 
 
 def main(args):
@@ -51,10 +51,10 @@ def main(args):
     if args.verbose:
         sys.stderr.write(f"> model basecaller params: {model.config['basecaller']}\n")
 
-    basecall = load_symbol(args.model_directory, "basecall")
-
     mods_model = None
     if args.modified_base_model is not None or args.modified_bases is not None:
+        from bonito.mod_util import call_mods, load_mods_model
+
         sys.stderr.write("> loading modified base model\n")
         mods_model = load_mods_model(
             args.modified_bases, args.model_directory, args.modified_base_model
@@ -173,5 +173,17 @@ def argparser():
     parser.add_argument("--batchsize", default=None, type=int)
     parser.add_argument("--max-reads", default=0, type=int)
     parser.add_argument('-v', '--verbose', action='count', default=0)
-    parser.add_argument("--modeltype", default=None, type=str, choices=["default","onlyb1","onlyb1b2","onlyb1x2",'tinynoskipx1','tinynoskipx2','tinynoskipx3','tinynoskipx01','tinynoskipx0111','tinynoskipx011'])
+    parser.add_argument(
+        "--modeltype",
+        default=None,
+        type=str,
+        choices=[
+            "default",
+            "tinynoskipx0111",
+            "tinynoskipx011",
+            "tinynoskipx01",
+            "tinynoskipx2",
+            "tinynoskipx3",
+        ],
+    )
     return parser
