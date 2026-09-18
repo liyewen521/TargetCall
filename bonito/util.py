@@ -13,8 +13,9 @@ from importlib import import_module
 from collections import deque, defaultdict, OrderedDict
 from torch.utils.data import DataLoader
 
-from model import create_model as create_inference_model
-from model import load_weights as load_inference_weights
+from model_inference import create_model as create_inference_model
+from model_inference import load_weights as load_inference_weights
+from model_inference.convert_legacy import flatten_legacy_state_dict
 
 import toml
 import torch
@@ -276,7 +277,7 @@ def _load_inference_model(dirname, modeltype):
             "unsupported model '%s'; choose from: %s" % (modeltype, available)
         )
 
-    return create_inference_model(model_name)
+    return create_inference_model(model_name), model_name
 
 
 def load_model(
@@ -312,7 +313,7 @@ def load_model(
         "batchsize": batchsize or 64,
         "quantize": False if quantize is None else quantize,
     }
-    model = _load_inference_model(dirname, modeltype)
+    model, model_name = _load_inference_model(dirname, modeltype)
     model.config = {"basecaller": basecall_params}
 
     if use_koi:
@@ -320,7 +321,12 @@ def load_model(
             "the standalone inference models do not support koi graph conversion"
         )
 
-    load_inference_weights(model, weights, map_location=device)
+    state = torch.load(weights, map_location=device)
+    load_inference_weights(
+        model,
+        flatten_legacy_state_dict(model_name, state),
+        map_location=device,
+    )
 
     if half is None:
         half = device.type == "cuda" and half_supported()

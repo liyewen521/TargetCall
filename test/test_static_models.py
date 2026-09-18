@@ -13,8 +13,8 @@ from bonito.ctc.modeltinynoskipx01 import ModelTinyNoSkipX01
 from bonito.ctc.modeltinynoskipx2 import ModelTinyNoSkipX2
 from bonito.ctc.modeltinynoskipx3 import ModelTinyNoSkipX3
 from bonito.util import load_model as load_application_model
-from model import MODEL_CLASSES as STANDALONE_MODEL_CLASSES
-from model import load_weights as load_standalone_weights
+from model_inference import MODEL_CLASSES as STANDALONE_MODEL_CLASSES
+from model_inference.convert_legacy import flatten_legacy_state_dict
 
 
 MODEL_CASES = {
@@ -127,7 +127,13 @@ class StaticModelTest(unittest.TestCase):
                     strict=True,
                 )
                 standalone_model = STANDALONE_MODEL_CLASSES[model_name]()
-                load_standalone_weights(standalone_model, weights_path)
+                standalone_model.load_state_dict(
+                    flatten_legacy_state_dict(
+                        model_name,
+                        torch.load(weights_path, map_location='cpu'),
+                    ),
+                    strict=True,
+                )
                 legacy_model.eval()
                 standalone_model.eval()
 

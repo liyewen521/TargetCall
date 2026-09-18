@@ -47,14 +47,22 @@ You can find all models listed under bonito/models/.
 | TINYX2  | LC-Main/4 | 52K  | 80.82%  |
 | TINYX3  | LC-Main/8  | 21K  | 70.42%  |
 
-## Standalone inference model
+## Standalone inference models
 
-[`model.py`](./model.py) is a self-contained PyTorch implementation of all six
-TargetCall models. It only depends on PyTorch: it does not import Bonito, does
-not read `config.toml`, and does not use the original
-`Encoder`/`Block`/`TCSConv1d`/`Decoder` wrappers. Every block is built from
-primitive `Conv1d` and `BatchNorm1d` layers, which keeps the graph simple for
-inference, ONNX export, or quantization.
+[`model_inference/`](./model_inference) is a self-contained PyTorch package with
+one file per model. Every convolution and batch-norm layer is written out
+explicitly in the model's `__init__` and called in order in `forward`; there are
+no block wrappers or generated layer specs. The package only depends on
+PyTorch: it does not import Bonito and does not read `config.toml`.
+
+| File | Class | Model name |
+| --- | --- | --- |
+| `model_inference/default.py` | `DefaultModel` | `default` |
+| `model_inference/tinyx0111.py` | `TinyX0111Model` | `TINYX0111` |
+| `model_inference/tinyx011.py` | `TinyX011Model` | `TINYX011` |
+| `model_inference/tinyx01.py` | `TinyX01Model` | `TINYX01` |
+| `model_inference/tinyx2.py` | `TinyX2Model` | `TINYX2` |
+| `model_inference/tinyx3.py` | `TinyX3Model` | `TINYX3` |
 
 The TargetCall application uses these classes directly, so its model loading and
 basecalling path no longer reads model architecture from `config.toml`.
@@ -70,11 +78,11 @@ sequence additionally requires `fast_ctc_decode` (installed by
 ```python
 import torch
 
-from model import load_model
+from model_inference import load_model
 
 model = load_model(
     "TINYX011",
-    "bonito/models/TINYX011/weights_1.tar",
+    "model_inference/weights/TINYX011.pt",
     device="cpu",
 )
 
@@ -88,34 +96,47 @@ with torch.no_grad():
   `time = (samples - 1) // stride + 1` and `stride` is `3`.
 - Supported names: `default`, `TINYX0111`, `TINYX011`, `TINYX01`, `TINYX2`,
   `TINYX3` (the same names listed in the table above).
+- Calling `load_model("TINYX011")` without a path defaults to
+  `model_inference/weights/TINYX011.pt`.
 
 ### Building a model without weights
 
 ```python
-from model import create_model
+from model_inference import create_model
 
 model = create_model("TINYX3")
 ```
 
-`create_model` is the standalone equivalent of the old
-`bonito.ctc.create_model` and raises `ValueError` for unknown names.
+`create_model` raises `ValueError` for unknown names.
 
-### Loading weights
+### Weights
 
-`load_weights` accepts either the original TargetCall checkpoints (whose nested
-legacy key names are remapped automatically) or an already-flattened
-`state_dict` whose keys match the model:
+Each model is its own class with its own flat layer names, so it loads a
+flattened `state_dict` whose keys match `model.state_dict()`. Convert the
+bundled TargetCall checkpoints once with:
 
-```python
-from model import create_model, load_weights
-
-model = create_model("TINYX011")
-load_weights(model, "bonito/models/TINYX011/weights_1.tar")
+```bash
+python -m model_inference.convert_legacy TINYX011 \
+    bonito/models/TINYX011/weights_1.tar
+# writes model_inference/weights/TINYX011.pt
 ```
 
-Checkpoints wrapped in a `state_dict` or `model_state_dict` mapping, and keys
-prefixed with `module.`, are handled automatically. Pass `strict=False` to
-allow unexpected extra keys.
+Then load the flattened file:
+
+```python
+from model_inference import create_model, load_weights
+
+model = create_model("TINYX011")
+load_weights(model, "model_inference/weights/TINYX011.pt")
+```
+
+`load_weights` also accepts an in-memory state dict. Checkpoints wrapped in a
+`state_dict` or `model_state_dict` mapping, and keys prefixed with `module.`,
+are unwrapped automatically. Pass `strict=False` to allow extra keys.
+
+The Bonito application adapter (`bonito.util.load_model`) still understands the
+bundled `.tar` checkpoints and converts them on the fly, so no manual step is
+needed when running the basecaller.
 
 ### Model attributes
 
@@ -129,7 +150,7 @@ Each model exposes the metadata needed for basecalling:
 
 ### Decoding
 
-`model.py` returns log probabilities. Turn them into a sequence with
+The models return log probabilities. Turn them into a sequence with
 `fast_ctc_decode` directly, or with the same helper the basecaller uses:
 
 ```python
@@ -167,7 +188,7 @@ PYTHONPATH=. python test/test_static_models.py
 ```
 
 The tests verify that the application loads a model without calling
-`toml.load`, and that each standalone model matches the original config-based
+`toml.load`, and that each explicit model matches the original config-based
 model bit-for-bit.
 
 ## Reproducing the results in the paper
