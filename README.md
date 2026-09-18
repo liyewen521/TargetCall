@@ -47,13 +47,25 @@ You can find all models listed under bonito/models/.
 | TINYX2  | LC-Main/4 | 52K  | 80.82%  |
 | TINYX3  | LC-Main/8  | 21K  | 70.42%  |
 
-### Single-file model
+## Standalone inference model
 
-[`model.py`](./model.py) is a standalone inference file
-that only depends on PyTorch. It contains the six supported model classes,
-their primitive `Conv1d` and `BatchNorm1d` layers, the forward pass, and a
-loader for the original TargetCall weights. It does not import Bonito or read
-TOML files.
+[`model.py`](./model.py) is a self-contained PyTorch implementation of all six
+TargetCall models. It only depends on PyTorch: it does not import Bonito, does
+not read `config.toml`, and does not use the original
+`Encoder`/`Block`/`TCSConv1d`/`Decoder` wrappers. Every block is built from
+primitive `Conv1d` and `BatchNorm1d` layers, which keeps the graph simple for
+inference, ONNX export, or quantization.
+
+The TargetCall application uses these classes directly, so its model loading and
+basecalling path no longer reads model architecture from `config.toml`.
+
+### Requirements
+
+Only `torch` is required to build a model and run a forward pass. Decoding a
+sequence additionally requires `fast_ctc_decode` (installed by
+`requirements.txt`).
+
+### Quick start
 
 ```python
 import torch
@@ -63,6 +75,7 @@ from model import load_model
 model = load_model(
     "TINYX011",
     "bonito/models/TINYX011/weights_1.tar",
+    device="cpu",
 )
 
 signal = torch.randn(1, 1, 4000)
@@ -70,11 +83,92 @@ with torch.no_grad():
     log_probabilities = model(signal)
 ```
 
-The model input layout is `[batch, 1, samples]`; its output layout is
-`[time, batch, 5]` and contains log probabilities.
+- Input layout: `[batch, 1, samples]`.
+- Output layout: `[time, batch, 5]` log probabilities, where
+  `time = (samples - 1) // stride + 1` and `stride` is `3`.
+- Supported names: `default`, `TINYX0111`, `TINYX011`, `TINYX01`, `TINYX2`,
+  `TINYX3` (the same names listed in the table above).
 
-The TargetCall application uses these classes directly. Its model loading and
-basecalling path no longer reads model architecture from `config.toml`.
+### Building a model without weights
+
+```python
+from model import create_model
+
+model = create_model("TINYX3")
+```
+
+`create_model` is the standalone equivalent of the old
+`bonito.ctc.create_model` and raises `ValueError` for unknown names.
+
+### Loading weights
+
+`load_weights` accepts either the original TargetCall checkpoints (whose nested
+legacy key names are remapped automatically) or an already-flattened
+`state_dict` whose keys match the model:
+
+```python
+from model import create_model, load_weights
+
+model = create_model("TINYX011")
+load_weights(model, "bonito/models/TINYX011/weights_1.tar")
+```
+
+Checkpoints wrapped in a `state_dict` or `model_state_dict` mapping, and keys
+prefixed with `module.`, are handled automatically. Pass `strict=False` to
+allow unexpected extra keys.
+
+### Model attributes
+
+Each model exposes the metadata needed for basecalling:
+
+- `model.alphabet` — output labels, i.e. `["N", "A", "C", "G", "T"]`.
+- `model.stride` — number of input samples per output time step (`3`).
+- `model.features` — number of channels feeding the decoder.
+- `model.qscale` / `model.qbias` — qscore scaling used during decoding
+  (`1.0` and `0.0` for the provided models).
+
+### Decoding
+
+`model.py` returns log probabilities. Turn them into a sequence with
+`fast_ctc_decode` directly, or with the same helper the basecaller uses:
+
+```python
+from bonito.ctc.basecall import ctc_decode
+
+scores = log_probabilities[:, 0, :]  # [time, 5] log probabilities
+sequence = ctc_decode(
+    scores,
+    model.alphabet,
+    model.qscale,
+    model.qbias,
+    beamsize=5,
+)
+```
+
+Use `beamsize=1, qscores=True, return_path=True` for Viterbi decoding with a
+quality string and move path.
+
+### Using it through the basecaller CLI
+
+The application path (`bonito basecaller`) loads the same classes:
+
+```bash
+python -m bonito basecaller bonito/models/TINYX011 reads/ \
+    --modeltype tinynoskipx011 --device cuda:0 --batchsize 3200
+```
+
+`--modeltype` maps to the standalone classes as `default`, `tinynoskipx0111`,
+`tinynoskipx011`, `tinynoskipx01`, `tinynoskipx2`, and `tinynoskipx3`.
+
+### Tests
+
+```bash
+PYTHONPATH=. python test/test_static_models.py
+```
+
+The tests verify that the application loads a model without calling
+`toml.load`, and that each standalone model matches the original config-based
+model bit-for-bit.
 
 ## Reproducing the results in the paper
 
