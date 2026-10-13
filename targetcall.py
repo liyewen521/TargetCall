@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -102,7 +103,11 @@ def run(args):
     print("\nfastq_to_fasta {} {}".format(fastq_path, fasta_path))
     fastq_to_fasta(fastq_path, fasta_path)
 
-    bundled_minimap2 = repository / "tools" / "minimap2"
+    machine = platform.machine().lower()
+    if machine in ("aarch64", "arm64"):
+        bundled_minimap2 = repository / "tools" / "minimap2-aarch64" / "minimap2"
+    else:
+        bundled_minimap2 = repository / "tools" / "minimap2"
     minimap2 = str(bundled_minimap2) if bundled_minimap2.exists() else "minimap2"
     alignment_command = [
         minimap2,
