@@ -25,6 +25,41 @@ chmod +x minimap2
 | Input 2 | reads to align, FASTA or FASTQ (optionally gzip-compressed) |
 | Output | PAF by default; SAM with `-a`; SAM/PAF written to stdout unless `-o` is given |
 
+## Example (included)
+
+A tiny self-contained example is bundled in this folder so you can run it
+immediately:
+
+| File | Role |
+| --- | --- |
+| `reference.fasta` | example reference (4000 bp) |
+| `reads.fasta` | 3 example reads (substrings of the reference) |
+| `example.sam` | SAM produced by `minimap2 -a -x map-ont reference.fasta reads.fasta` |
+
+Reproduce / run:
+
+```bash
+./run_example.sh
+# -> writes output.sam
+
+# or explicitly
+./minimap2 -a -x map-ont reference.fasta reads.fasta > output.sam
+```
+
+On a non-ARM machine, run the binary through QEMU:
+
+```bash
+qemu-aarch64-static ./minimap2 -a -x map-ont reference.fasta reads.fasta > output.sam
+```
+
+Expected alignments (from `example.sam`):
+
+```
+read_1  0  example_reference  101   60  1500M
+read_2  0  example_reference  1801  60  1600M
+read_3  0  example_reference  2501  60  1500M
+```
+
 ## Usage
 
 Align ONT reads to a reference and write SAM:
