@@ -16,7 +16,7 @@ sess = ort.InferenceSession(path, providers=['CPUExecutionProvider'])
 inp = sess.get_inputs()[0]
 out = sess.get_outputs()[0]
 
-# 从模型声明读取输入 shape，动态维度(None/0)用 length 替换
+# read input shape from the model; replace dynamic dims (None/0) with length
 declared = list(inp.shape)
 shape = [length if (d is None or d == 0) else d for d in declared]
 
@@ -27,8 +27,8 @@ print(f"  output: {out.name} {out.shape} ({out.type})")
 x = np.random.randn(*shape).astype(np.float32)
 y = sess.run(None, {inp.name: x})[0]
 
-print(f"\n输入 shape: {x.shape}")
-print(f"输出 shape: {y.shape}")
-print(f"输出数值范围: [{y.min():.3f}, {y.max():.3f}]  (log-prob, 应为负值)")
-print(f"输出第 0 个时间步的碱基 log-prob:")
-print(f"  {y.reshape(-1, y.shape[-1])[0]}")  # 展平到 (..., 5) 取第一个时间步
+print(f"\ninput shape: {x.shape}")
+print(f"output shape: {y.shape}")
+print(f"output value range: [{y.min():.3f}, {y.max():.3f}]  (log-prob, should be negative)")
+print(f"base log-prob at time step 0:")
+print(f"  {y.reshape(-1, y.shape[-1])[0]}")  # flatten to (..., 5) and take the first time step

@@ -81,7 +81,7 @@ for name, (config_dir, modeltype) in MODELS.items():
         output_names=['log_probs'],
         opset_version=14,
         do_constant_folding=True,
-        # 不传 dynamic_axes → 导出后 shape 固定
+        # no dynamic_axes -> fixed shape after export
     )
     size_mb = os.path.getsize(out_path) / (1024 * 1024)
     print(f"  -> {out_path} ({size_mb:.1f} MB)")

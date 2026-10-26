@@ -13,19 +13,19 @@ y2s = y2.reshape(y1.shape)
 abs_diff = np.abs(y1 - y2s)
 rel_diff = abs_diff / (np.abs(y1) + 1e-6)
 
-print(f"log-prob 绝对差异: max={abs_diff.max():.3e}  mean={abs_diff.mean():.3e}")
-print(f"log-prob 相对差异: max={rel_diff.max():.3e}  mean={rel_diff.mean():.3e}")
-print(f"log-prob 数值范围: [{y1.min():.3f}, {y1.max():.3f}]")
+print(f"log-prob absolute diff: max={abs_diff.max():.3e}  mean={abs_diff.mean():.3e}")
+print(f"log-prob relative diff: max={rel_diff.max():.3e}  mean={rel_diff.mean():.3e}")
+print(f"log-prob value range: [{y1.min():.3f}, {y1.max():.3f}]")
 
-# 最终碱基判定 (argmax) 是否一致
+# whether the final base call (argmax) matches
 arg1 = y1.argmax(-1)
 arg2 = y2s.argmax(-1)
 mismatch = (arg1 != arg2).sum()
 total = arg1.size
-print(f"\nargmax 碱基判定: {total} 个位置中 {mismatch} 个不一致 ({mismatch/total*100:.4f}%)")
-print("=> 碱基判定完全一致" if mismatch == 0 else f"=> {mismatch} 个不一致")
+print(f"\nargmax base calls: {total} positions, {mismatch} differ ({mismatch/total*100:.4f}%)")
+print("=> base calls fully consistent" if mismatch == 0 else f"=> {mismatch} differ")
 
-# 概率分布 (softmax) 是否一致
+# whether probability distributions (softmax) match
 p1 = np.exp(y1) / np.exp(y1).sum(-1, keepdims=True)
 p2 = np.exp(y2s) / np.exp(y2s).sum(-1, keepdims=True)
-print(f"softmax 概率差异: max={np.abs(p1-p2).max():.3e}")
+print(f"softmax probability diff: max={np.abs(p1-p2).max():.3e}")

@@ -41,12 +41,12 @@ for node in g.node:
     elif node.op_type == 'Transpose':
         for attr in node.attribute:
             if attr.name == 'perm':
-                # 3D perm [a,b,c] (B/C/L) -> 4D: B->0, C->1, L->3, H(=2) 插在 C 之前
-                # 这样 log_softmax(dim=-1) 仍作用在碱基维度 C 上
+                # 3D perm [a,b,c] (B/C/L) -> 4D: B->0, C->1, L->3, H(=2) inserted before C
+                # so log_softmax(dim=-1) still acts on the base dimension C
                 old = list(attr.ints)
                 new = [3 if p == 2 else p for p in old]
-                idx = new.index(1)  # C 的位置
-                new.insert(idx, 2)  # H 插在 C 之前
+                idx = new.index(1)  # position of C
+                new.insert(idx, 2)  # insert H before C
                 attr.ints[:] = new
 
 # input/output shape: [B,C,L] -> [B,C,1,L]; [T,B,5] -> [T,B,1,5]
@@ -72,6 +72,6 @@ x = np.random.randn(1, 1, 4000).astype(np.float32)
 y1 = s1.run(None, {s1.get_inputs()[0].name: x})[0]
 y2 = s2.run(None, {s2.get_inputs()[0].name: x.reshape(1, 1, 1, 4000)})[0]
 print(f"\n1D output shape: {y1.shape}")
-print(f"2D output shape: {y2.shape}  (2D 版本第2维是 H=1)")
+print(f"2D output shape: {y2.shape}  (2D version: dim 1 is H=1)")
 print(f"max abs diff: {np.max(np.abs(y1 - y2.reshape(y1.shape))):.3e}")
-print("=> 输出完全一致" if np.allclose(y1, y2.reshape(y1.shape), atol=1e-5) else "=> 有差异！")
+print("=> outputs identical" if np.allclose(y1, y2.reshape(y1.shape), atol=1e-5) else "=> mismatch!")
