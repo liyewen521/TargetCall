@@ -84,4 +84,4 @@ for name in MODELS:
     ok = np.allclose(y_new, y_old_t, atol=1e-5)
     print(f'{name:16s}  {tuple(y_old.shape)} -> {tuple(y_new.shape)}  max|Δ|={diff:.2e}  {"OK" if ok else "DIFF"}')
 
-print('\n全部完成')
+print('\nAll done')

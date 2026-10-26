@@ -30,7 +30,7 @@ print(f"  outputs: {[fmt(o.name) for o in g.output]}")
 print(f"  weights: {len(g.initializer)} tensors")
 print()
 
-print("逐层结构 (node -> input -> output):")
+print("layer structure (node -> input -> output):")
 for i, node in enumerate(g.node):
     attrs = []
     for a in node.attribute:

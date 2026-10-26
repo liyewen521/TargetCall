@@ -39,8 +39,8 @@ def convert_1d_to_bchw(src, dst):
                 if attr.name == 'perm':
                     old = list(attr.ints)
                     new = [3 if p == 2 else p for p in old]
-                    idx = new.index(1)  # C 的位置
-                    new.insert(idx, 2)  # H 插在 C 之前
+                    idx = new.index(1)  # position of C
+                    new.insert(idx, 2)  # insert H before C
                     attr.ints[:] = new
 
     # 3. input/output shape: insert H=1 at position 2
@@ -72,4 +72,4 @@ for name in MODELS:
     status = 'OK' if mismatch == 0 else f'{mismatch} MISMATCH'
     print(f'  -> {name}_bchw.onnx  argmax={mismatch}/{total}  max|Δ|={abs_diff:.2e}  [{status}]')
 
-print('\n全部完成')
+print('\nAll done')

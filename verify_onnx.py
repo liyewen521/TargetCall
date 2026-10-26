@@ -12,4 +12,4 @@ for p in sorted(Path('/Projects/ACCESS_IVFS/onnx_models').glob('*.onnx')):
     print(f'{p.name:24s} {size:6.2f} MB  ops={n_ops:3d}  in={in_shape}  out={out_shape}')
 
 print()
-print('全部通过 onnx.checker 校验')
+print('all passed onnx.checker validation')

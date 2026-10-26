@@ -42,6 +42,6 @@ for name in MODELS:
     argmax_same = (y_log.argmax(-1) == y_sm.argmax(-1)).all()
     # softmax == exp(log_softmax)
     max_dev = np.abs(y_sm - np.exp(y_log)).max()
-    print(f'  argmax 一致: {argmax_same}   |softmax-exp(logsoftmax)|={max_dev:.2e}')
+    print(f'  argmax match: {argmax_same}   |softmax-exp(logsoftmax)|={max_dev:.2e}')
 
-print('\n全部完成')
+print('\nAll done')
