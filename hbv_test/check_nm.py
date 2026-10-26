@@ -46,15 +46,15 @@ def stats(name, rates):
     print(f"{name}: n={n}  median mismatch rate={med:.3f}  "
           f"mean={sum(rates)/n:.3f}  max={max(rates):.3f}" if n else f"{name}: empty")
 
-print("错配率 (NM / aligned length) 对比:")
-stats("FN (hash filter 漏掉)", fn_rates)
-stats("TP (两者都接受)  ", tp_rates)
+print("mismatch rate (NM / aligned length) comparison:")
+stats("FN (missed by hash filter)", fn_rates)
+stats("TP (accepted by both)  ", tp_rates)
 
 # Bucket distribution of FN mismatch rates
 buckets = Counter()
 for r in fn_rates:
     b = '>=15%' if r >= 0.15 else ('10-15%' if r >= 0.10 else ('5-10%' if r >= 0.05 else '<5%'))
     buckets[b] += 1
-print("\nFN 错配率分布:")
+print("\nFN mismatch rate distribution:")
 for b in ['<5%', '5-10%', '10-15%', '>=15%']:
     print(f"  {b}: {buckets.get(b, 0)}")

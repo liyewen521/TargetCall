@@ -28,6 +28,6 @@ for rid in fn:
     else:
         c[('MISSING',)] += 1
 
-print('FN 的 (coherent_hits, initial_decision, final_decision) 分布:')
+print('FN (coherent_hits, initial_decision, final_decision) distribution:')
 for k, v in sorted(c.items(), key=lambda x: -x[1]):
     print(f'  {k}: {v}')

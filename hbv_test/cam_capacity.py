@@ -3,23 +3,23 @@ import math
 hbv_len = 3182
 cells = 512 * 512
 
-print('HBV 参考长度:', hbv_len, 'bp')
-print('阵列 cell 数: 512x512 =', cells, '(互补型 2 cell/bit -> 有效', cells // 2, 'bit)')
+print('HBV reference length:', hbv_len, 'bp')
+print('array cells: 512x512 =', cells, '(complementary 2 cell/bit -> effective', cells // 2, 'bit)')
 print()
-print('=== k-mer 数 vs 阵列容量 (bit 总量口径) ===')
+print('=== number of k-mers vs array capacity (total bits) ===')
 for k in [15, 21, 31]:
     n = hbv_len - k + 1
     bits = 2 * k
-    cell_comp = bits * 2  # 互补型 2 cell/bit
+    cell_comp = bits * 2  # complementary 2 cell/bit
     total_cells = n * cell_comp
     ratio = total_cells / cells
-    print(f'  {k}-mer: {n} 个, {bits} bit/key (互补 {cell_comp} cell), '
-          f'总 {total_cells:,} cell, 占阵列 {ratio*100:.0f}%')
+    print(f'  {k}-mer: {n} entries, {bits} bit/key (complementary {cell_comp} cell), '
+          f'total {total_cells:,} cell, {ratio*100:.0f}% of array')
 
 print()
-print('=== 标准 CAM 结构 (每 matchline 一个 key) ===')
-print('  512 matchline = 512 个 key 槽位 (硬约束)')
+print('=== standard CAM structure (one key per matchline) ===')
+print('  512 matchline = 512 key slots (hard constraint)')
 for k in [15, 21, 31]:
     n = hbv_len - k + 1
-    print(f'  {k}-mer: {n} 个 k-mer 需要 {n} 行 -> 差 {n/512:.1f} 倍, '
-          f'需 {math.ceil(n/512)} 块 512x512 阵列')
+    print(f'  {k}-mer: {n} k-mers need {n} rows -> {n/512:.1f}x short, '
+          f'need {math.ceil(n/512)} 512x512 arrays')

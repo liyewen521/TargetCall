@@ -25,7 +25,7 @@ cam_bits_1cell = cam_cells          # 1T1R
 cam_bits_2cell = cam_cells // 2     # complementary 2R
 
 for bits in [32, 40, 48]:
-    for label, eff_bits in [("1 cell/bit", cam_bits_1cell), ("2 cell/bit (互补)", cam_bits_2cell)]:
+    for label, eff_bits in [("1 cell/bit", cam_bits_1cell), ("2 cell/bit (complementary)", cam_bits_2cell)]:
         slots = eff_bits // bits
         status = "OK" if slots >= n_kmers else "NOT ENOUGH"
         print(f"  {bits}-bit hash, {label}: {slots} slots vs {n_kmers} k-mers -> {status}")

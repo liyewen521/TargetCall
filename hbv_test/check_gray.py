@@ -13,4 +13,4 @@ for seed in [31, 25, 21, 17, 15]:
     total = sum(c.values())
     print(f"seed={seed:>2}: total={total}  "
           f"accept={c.get('accept',0)}  gray={c.get('gray',0)}  reject={c.get('reject',0)}  "
-          f"(gray 走 minimap2 兜底)")
+          f"(gray falls back to minimap2)")

@@ -39,7 +39,7 @@ def best_align(rid):
             best = (alen, nm, p[5])
     return best or (0, 0, '')
 
-print("=== 131 FN 的差异构成：substitution vs indel ===")
+print("=== composition of 131 FN differences: substitution vs indel ===")
 n_sub_dominant = 0
 n_indel_dominant = 0
 indel_counts = []
@@ -58,19 +58,19 @@ for rid in fn:
     else:
         n_sub_dominant += 1
 
-print(f"  substitution 主导: {n_sub_dominant}")
-print(f"  indel 主导:       {n_indel_dominant}")
+print(f"  substitution-dominant: {n_sub_dominant}")
+print(f"  indel-dominant:       {n_indel_dominant}")
 
 # distribution of indel events per read
 dist = Counter()
 for c in indel_counts:
     b = '0' if c == 0 else ('1-2' if c <= 2 else ('3-5' if c <= 5 else ('6-10' if c <= 10 else '>10')))
     dist[b] += 1
-print("\n  每个 FN 的 indel 事件数分布:")
+print("\n  indel event count distribution per FN:")
 for b in ['0', '1-2', '3-5', '6-10', '>10']:
     print(f"    {b:>5}: {dist.get(b, 0)}")
 
-print("\n  示例 CIGAR（前 5 个 FN）:")
+print("\n  example CIGAR (first 5 FN):")
 for i, rid in enumerate(list(fn)[:5]):
     alen, nm, cigar = best_align(rid)
     print(f"    {rid}: alen={alen} NM={nm} cigar={cigar[:80]}")
