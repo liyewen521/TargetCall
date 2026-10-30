@@ -2,7 +2,10 @@
 
 Every convolution and batch-norm layer is declared explicitly in
 __init__; there are no block wrappers or generated layer specs.
-Input:  [batch, 1, 1, samples]
+The original stride-3 stem is rewritten as a stride-1 3x3 convolution over a
+folded input, so the network only uses stride 1/2 convolutions.
+
+Input:  [batch, 1, 3, time]  (samples folded as M[r, c] = [0, x, 0][3*c + r])
 Output: [batch, 1, time, 5] probabilities
 """
 
@@ -13,7 +16,7 @@ import torch.nn.functional as F
 class TinyX3Model(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv0 = nn.Conv2d(1, 12, kernel_size=(1, 9), stride=(1, 3), padding=(0, 4), dilation=(1, 1), groups=1, bias=False)
+        self.conv0 = nn.Conv2d(1, 12, kernel_size=(3, 3), stride=(1, 1), padding=(0, 1), dilation=(1, 1), groups=1, bias=False)
         self.bn0 = nn.BatchNorm2d(12, eps=0.001, momentum=0.1)
         self.depthwise1 = nn.Conv2d(12, 12, kernel_size=(1, 75), stride=(1, 1), padding=(0, 37), dilation=(1, 1), groups=12, bias=False)
         self.pointwise1 = nn.Conv2d(12, 20, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1, bias=False)
@@ -105,6 +108,17 @@ class TinyX3Model(nn.Module):
         self.features = 12
         self.qbias = 0.0
         self.qscale = 1.0
+
+    def load_state_dict(self, state_dict, strict=True):
+        """Accept the original 1x9 conv0 weights or already-folded 3x3 ones."""
+        if "conv0.weight" in state_dict:
+            weight = state_dict["conv0.weight"]
+            if tuple(weight.shape[-2:]) != (3, 3):
+                state_dict = dict(state_dict)
+                state_dict["conv0.weight"] = (
+                    weight.reshape(12, 1, 3, 3).permute(0, 1, 3, 2).contiguous()
+                )
+        return super().load_state_dict(state_dict, strict=strict)
 
     def forward(self, x):
         x = self.conv0(x)
