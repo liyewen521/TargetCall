@@ -9,8 +9,52 @@ Input:  [batch, 1, 3, time]  (samples folded as M[r, c] = [0, x, 0][3*c + r])
 Output: [batch, 1, time, 5] probabilities
 """
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+MAX_FILTER = 15
+
+
+def split_depthwise(x, conv, maxk=MAX_FILTER):
+    """Evaluate a depthwise Conv2d whose kernel exceeds maxk exactly as a sum
+    of <=maxk-tap depthwise convolutions (full correlation + aligned add).
+
+    Uses only Conv (kernel <= maxk), Slice, Concat and Add.
+    """
+    weight = conv.weight
+    length = weight.shape[-1]
+    groups = conv.groups
+    centre = (length - 1) // 2
+    n = x.shape[-1]
+    parts = []
+    start = 0
+    while start < length:
+        size = min(maxk, length - start)
+        full = F.conv2d(
+            x,
+            weight[..., start:start + size],
+            padding=(0, size - 1),
+            groups=groups,
+        )
+        shift = centre - start - (size - 1)
+        if shift >= 0:
+            head = full.new_zeros(full.shape[:-1] + (shift,))
+            parts.append(torch.cat([head, full[..., :n - shift]], dim=-1))
+        else:
+            tail = full[..., -shift:]
+            if tail.shape[-1] < n:
+                pad = full.new_zeros(full.shape[:-1] + (n - tail.shape[-1],))
+                tail = torch.cat([tail, pad], dim=-1)
+            else:
+                tail = tail[..., :n]
+            parts.append(tail)
+        start += size
+    out = parts[0]
+    for part in parts[1:]:
+        out = out + part
+    return out
 
 
 class TinyX3Model(nn.Module):
@@ -124,35 +168,35 @@ class TinyX3Model(nn.Module):
         x = self.conv0(x)
         x = self.bn0(x)
         x = F.relu(x)
-        x = self.depthwise1(x)
+        x = split_depthwise(x, self.depthwise1)
         x = self.pointwise1(x)
         x = self.bn1(x)
         x = F.relu(x)
-        x = self.depthwise2(x)
+        x = split_depthwise(x, self.depthwise2)
         x = self.pointwise2(x)
         x = self.bn2(x)
         x = F.relu(x)
-        x = self.depthwise3(x)
+        x = split_depthwise(x, self.depthwise3)
         x = self.pointwise3(x)
         x = self.bn3(x)
         x = F.relu(x)
-        x = self.depthwise4(x)
+        x = split_depthwise(x, self.depthwise4)
         x = self.pointwise4(x)
         x = self.bn4(x)
         x = F.relu(x)
-        x = self.depthwise5(x)
+        x = split_depthwise(x, self.depthwise5)
         x = self.pointwise5(x)
         x = self.bn5(x)
         x = F.relu(x)
-        x = self.depthwise6(x)
+        x = split_depthwise(x, self.depthwise6)
         x = self.pointwise6(x)
         x = self.bn6(x)
         x = F.relu(x)
-        x = self.depthwise7(x)
+        x = split_depthwise(x, self.depthwise7)
         x = self.pointwise7(x)
         x = self.bn7(x)
         x = F.relu(x)
-        x = self.depthwise8(x)
+        x = split_depthwise(x, self.depthwise8)
         x = self.pointwise8(x)
         x = self.bn8(x)
         x = F.relu(x)
@@ -180,27 +224,27 @@ class TinyX3Model(nn.Module):
         x = self.pointwise14(x)
         x = self.bn14(x)
         x = F.relu(x)
-        x = self.depthwise15(x)
+        x = split_depthwise(x, self.depthwise15)
         x = self.pointwise15(x)
         x = self.bn15(x)
         x = F.relu(x)
-        x = self.depthwise16(x)
+        x = split_depthwise(x, self.depthwise16)
         x = self.pointwise16(x)
         x = self.bn16(x)
         x = F.relu(x)
-        x = self.depthwise17(x)
+        x = split_depthwise(x, self.depthwise17)
         x = self.pointwise17(x)
         x = self.bn17(x)
         x = F.relu(x)
-        x = self.depthwise18(x)
+        x = split_depthwise(x, self.depthwise18)
         x = self.pointwise18(x)
         x = self.bn18(x)
         x = F.relu(x)
-        x = self.depthwise19(x)
+        x = split_depthwise(x, self.depthwise19)
         x = self.pointwise19(x)
         x = self.bn19(x)
         x = F.relu(x)
-        x = self.depthwise20(x)
+        x = split_depthwise(x, self.depthwise20)
         x = self.pointwise20(x)
         x = self.bn20(x)
         x = F.relu(x)
@@ -212,7 +256,7 @@ class TinyX3Model(nn.Module):
         x = self.pointwise22(x)
         x = self.bn22(x)
         x = F.relu(x)
-        x = self.depthwise23(x)
+        x = split_depthwise(x, self.depthwise23)
         x = self.pointwise23(x)
         x = self.bn23(x)
         x = F.relu(x)
@@ -224,7 +268,7 @@ class TinyX3Model(nn.Module):
         x = self.pointwise25(x)
         x = self.bn25(x)
         x = F.relu(x)
-        x = self.depthwise26(x)
+        x = split_depthwise(x, self.depthwise26)
         x = self.pointwise26(x)
         x = self.bn26(x)
         x = F.relu(x)
