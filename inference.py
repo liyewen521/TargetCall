@@ -19,6 +19,7 @@ from tinyx011 import TinyX011Model
 from tinyx01 import TinyX01Model
 from tinyx2 import TinyX2Model
 from tinyx3 import TinyX3Model
+from tinyx3_ivfs import Model as TinyX3IVFSModel
 
 
 MODEL_CLASSES = {
@@ -28,6 +29,7 @@ MODEL_CLASSES = {
     "TINYX01": TinyX01Model,
     "TINYX2": TinyX2Model,
     "TINYX3": TinyX3Model,
+    "tinyx3_ivfs": TinyX3IVFSModel,
 }
 
 WEIGHTS_DIRECTORY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
@@ -57,6 +59,8 @@ def flatten_state_dict(state):
         state = state["model_state_dict"]
     elif "state_dict" in state:
         state = state["state_dict"]
+    elif "model" in state:
+        state = state["model"]
     return to_deploy_shapes({
         key[7:] if key.startswith("module.") else key: value
         for key, value in state.items()
@@ -91,6 +95,7 @@ __all__ = [
     "TinyX01Model",
     "TinyX2Model",
     "TinyX3Model",
+    "TinyX3IVFSModel",
     "MODEL_CLASSES",
     "WEIGHTS_DIRECTORY",
     "create_model",
