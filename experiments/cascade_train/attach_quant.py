@@ -15,15 +15,21 @@ symmetric int8 multiplier convention  scale = QMAX / max|w_channel|.
 Non-Conv nodes are scale pass-throughs: their output_scale equals the scale of
 the tensor feeding them, so every node's input_scale matches the previous
 node's output_scale (the invariant the hardware viewer/reference export
-`ctc_test.tinyx3.onnx` follows).  Softmax additionally scales its output by
-`exp_scale` and carries that attribute.
+`ctc_test.tinyx3.onnx` follows).  Softmax additionally carries `exp_scale`.
 
-Default QMAX is 2**(bits-1)-1 (127 for int8), the convention used by the first
-export of this model.  Pass --qmax 128 to match the reference export, which
-uses 2**(bits-1).  Activation scales default to 1.0 (no calibration).
+Activation scales default to 1.0 (no calibration).  Pass --act-maxabs with a
+JSON file mapping tensor name -> max|value| measured over a calibration set to
+give every Conv its own output_scale = max|value| / 127: the graph input scale
+is read from the "input" entry and the Softmax output scale from its own output
+tensor, so the int8 test vectors and the model agree on both boundaries.
+
+Default QMAX for weights is 2**(bits-1)-1 (127 for int8), the convention used
+by the first export of this model.  Pass --qmax 128 to match the reference
+export, which uses 2**(bits-1).
 """
 
 import argparse
+import json
 
 import numpy as np
 import onnx
@@ -34,6 +40,8 @@ CONV_ATTRS = ["input_bitdepth", "input_scale", "output_bitdepth", "output_scale"
               "weight_bitdepth", "weight_ch_scales"]
 
 PASSTHROUGH_OPS = ("Relu", "Reshape", "Transpose")
+
+ACT_QMAX = 127.0
 
 
 def get_attr(node, name, default=None):
@@ -50,6 +58,14 @@ def set_attr(node, name, value):
     node.attribute.append(onnx.helper.make_attribute(name, value))
 
 
+def load_act_scales(path):
+    """tensor name -> symmetric int8 scale, from a max|value| calibration file."""
+    if not path:
+        return {}
+    maxabs = json.load(open(path))
+    return {t: (float(v) / ACT_QMAX if v > 0 else 1.0) for t, v in maxabs.items()}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
@@ -64,15 +80,21 @@ def main():
                          "128 = 2**(b-1) as in ctc_test.tinyx3.onnx)")
     ap.add_argument("--exp-scale", type=int, default=2,
                     help="Softmax output gain written as exp_scale")
+    ap.add_argument("--act-maxabs", default="",
+                    help="JSON {tensor: max|value|} used for activation scales")
     args = ap.parse_args()
 
     m = onnx.load(args.src)
     g = m.graph
     inits = {i.name: i for i in g.initializer}
 
+    act_scale = load_act_scales(args.act_maxabs)
+
     # tensor name -> quantization scale, filled in topological order
     scale_of = {}
-    counts = {"conv": 0, "pass": 0, "softmax": 0, "skipped": 0}
+    if "input" in act_scale:
+        scale_of["input"] = act_scale["input"]
+    counts = {"conv": 0, "pass": 0, "softmax": 0, "skipped": 0, "calibrated": 0}
 
     def upstream_scale(node):
         for t in node.input:
@@ -90,8 +112,11 @@ def main():
             else:
                 scales = np.where(maxabs > 0, maxabs / args.qmax, 1.0)
 
-            in_s = get_attr(node, "input_scale", args.input_scale)
-            out_s = get_attr(node, "output_scale", args.output_scale)
+            in_s = upstream_scale(node)
+            out_s = act_scale.get(node.output[0],
+                                  get_attr(node, "output_scale", args.output_scale))
+            if node.output[0] in act_scale:
+                counts["calibrated"] += 1
 
             keep = [a for a in node.attribute if a.name not in CONV_ATTRS]
             del node.attribute[:]
@@ -116,23 +141,27 @@ def main():
 
         elif node.op_type == "Softmax":
             in_s = upstream_scale(node)
-            out_s = float(in_s) * float(args.exp_scale)
+            out_s = act_scale.get(node.output[0], float(in_s) * float(args.exp_scale))
+            if node.output[0] in act_scale:
+                counts["calibrated"] += 1
             set_attr(node, "input_bitdepth", args.bits)
             set_attr(node, "input_scale", float(in_s))
             set_attr(node, "output_bitdepth", args.bits)
-            set_attr(node, "output_scale", out_s)
+            set_attr(node, "output_scale", float(out_s))
             set_attr(node, "exp_scale", int(args.exp_scale))
-            scale_of[node.output[0]] = out_s
+            scale_of[node.output[0]] = float(out_s)
             counts["softmax"] += 1
 
         else:
             counts["skipped"] += 1
 
     onnx.save(m, args.dst)
-    print("[attach] %d Conv, %d pass-through, %d Softmax, %d skipped -> %s "
+    print("[attach] %d Conv, %d pass-through, %d Softmax, %d skipped, "
+          "%d activation scales applied -> %s "
           "(mode=%s, bits=%d, qmax=%g, exp_scale=%d)"
           % (counts["conv"], counts["pass"], counts["softmax"], counts["skipped"],
-             args.dst, args.mode, args.bits, args.qmax, args.exp_scale))
+             counts["calibrated"], args.dst, args.mode, args.bits, args.qmax,
+             args.exp_scale))
 
 
 if __name__ == "__main__":
