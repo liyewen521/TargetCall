@@ -12,6 +12,9 @@ Attributes per op type:
 `weight_ch_scales` is per output-channel (length = out_channels) and uses the
 symmetric int8 multiplier convention  scale = QMAX / max|w_channel|.
 
+Every scale in this file is a multiplier, i.e.  q_int8 = round(real * scale),
+real = q_int8 / scale,  with q_int8 kept in [-QMAX, QMAX].
+
 Non-Conv nodes are scale pass-throughs: their output_scale equals the scale of
 the tensor feeding them, so every node's input_scale matches the previous
 node's output_scale (the invariant the hardware viewer/reference export
@@ -22,7 +25,7 @@ holds, whichever of the two a consumer reads.
 
 Activation scales default to 1.0 (no calibration).  Pass --act-maxabs with a
 JSON file mapping tensor name -> max|value| measured over a calibration set to
-give every Conv its own output_scale = max|value| / 127: the graph input scale
+give every Conv its own output_scale = QMAX / max|value|: the graph input scale
 is read from the "input" entry and the Softmax output scale from its own output
 tensor, so the int8 test vectors and the model agree on both boundaries.
 
@@ -66,7 +69,7 @@ def load_act_scales(path):
     if not path:
         return {}
     maxabs = json.load(open(path))
-    return {t: (float(v) / ACT_QMAX if v > 0 else 1.0) for t, v in maxabs.items()}
+    return {t: (ACT_QMAX / float(v) if v > 0 else 1.0) for t, v in maxabs.items()}
 
 
 def main():
