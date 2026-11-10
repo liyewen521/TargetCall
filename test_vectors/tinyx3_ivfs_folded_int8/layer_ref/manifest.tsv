@@ -1,0 +1,11 @@
+idx	op	node	n	scale_in	scale_out	file_i8	file_f32
+0	Conv	/conv0/Conv	16008	26.224254608154297	22.721784591674805	000_conv0_Conv.i8.npy	000_conv0_Conv.f32.npy
+1	Relu	/Relu	16008		22.721784591674805	001_Relu.i8.npy	001_Relu.f32.npy
+2	Conv	/depthwise1/depthwise1.0/Conv	16008	22.721784591674805	11.598687171936035	002_depthwise1_depthwise1.0_Conv.i8.npy	002_depthwise1_depthwise1.0_Conv.f32.npy
+3	Conv	/depthwise1/depthwise1.1/Conv	16008	11.598687171936035	11.74638557434082	003_depthwise1_depthwise1.1_Conv.i8.npy	003_depthwise1_depthwise1.1_Conv.f32.npy
+4	Conv	/depthwise1/depthwise1.2/Conv	16008	11.74638557434082	11.895600318908691	004_depthwise1_depthwise1.2_Conv.i8.npy	004_depthwise1_depthwise1.2_Conv.f32.npy
+5	Conv	/depthwise1/depthwise1.3/Conv	16008	11.895600318908691	12.046372413635254	005_depthwise1_depthwise1.3_Conv.i8.npy	005_depthwise1_depthwise1.3_Conv.f32.npy
+6	Conv	/depthwise1/depthwise1.4/Conv	16008	12.046372413635254	12.198677062988281	006_depthwise1_depthwise1.4_Conv.i8.npy	006_depthwise1_depthwise1.4_Conv.f32.npy
+7	Conv	/depthwise1/depthwise1.5/Conv	16008	12.198677062988281	12.48197078704834	007_depthwise1_depthwise1.5_Conv.i8.npy	007_depthwise1_depthwise1.5_Conv.f32.npy
+8	Conv	/pointwise1/Conv	26680	12.48197078704834	12.006487846374512	008_pointwise1_Conv.i8.npy	008_pointwise1_Conv.f32.npy
+9	Relu	/Relu_1	26680		12.006487846374512	009_Relu_1.i8.npy	009_Relu_1.f32.npy
