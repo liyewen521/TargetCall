@@ -30,3 +30,19 @@ Accuracy against the float model:
 Only the attributes changed: the annotated ONNX produces bit-identical float
 outputs to the unannotated export, so any mismatch against these vectors comes
 from the int8 input quantisation, not from the annotation.
+
+## Softmax scales
+
+`exp_scale` on the Softmax node is written as the ratio
+`output_scale / input_scale` (0.13516730), so
+
+```
+output_scale == input_scale * exp_scale        (to float32 rounding, ~1e-8)
+127 * output_scale = 0.992169                  (<= 1)
+```
+
+A real softmax compresses logits (±7.3) into probabilities ([0, 1]), so this
+ratio is not an integer. Do not assume the placeholder `exp_scale = 2` of the
+uncalibrated model: reading `output_scale` and deriving it as
+`input_scale * exp_scale` now give the same answer.
+

@@ -15,7 +15,10 @@ symmetric int8 multiplier convention  scale = QMAX / max|w_channel|.
 Non-Conv nodes are scale pass-throughs: their output_scale equals the scale of
 the tensor feeding them, so every node's input_scale matches the previous
 node's output_scale (the invariant the hardware viewer/reference export
-`ctc_test.tinyx3.onnx` follows).  Softmax additionally carries `exp_scale`.
+`ctc_test.tinyx3.onnx` follows).  Softmax also carries `exp_scale`, which is
+written as the ratio output_scale / input_scale (an int when it divides evenly,
+otherwise a float) so that output_scale == input_scale * exp_scale always
+holds, whichever of the two a consumer reads.
 
 Activation scales default to 1.0 (no calibration).  Pass --act-maxabs with a
 JSON file mapping tensor name -> max|value| measured over a calibration set to
@@ -79,7 +82,9 @@ def main():
                     help="symmetric int8 full scale (127 = 2**(b-1)-1, "
                          "128 = 2**(b-1) as in ctc_test.tinyx3.onnx)")
     ap.add_argument("--exp-scale", type=int, default=2,
-                    help="Softmax output gain written as exp_scale")
+                    help="Softmax output gain used when no calibrated scale is "
+                         "available; exp_scale itself is written as "
+                         "output_scale / input_scale")
     ap.add_argument("--act-maxabs", default="",
                     help="JSON {tensor: max|value|} used for activation scales")
     args = ap.parse_args()
@@ -144,11 +149,13 @@ def main():
             out_s = act_scale.get(node.output[0], float(in_s) * float(args.exp_scale))
             if node.output[0] in act_scale:
                 counts["calibrated"] += 1
+            ratio = float(out_s) / float(in_s) if in_s else float(args.exp_scale)
+            exp_scale = int(round(ratio)) if abs(ratio - round(ratio)) < 1e-9 else ratio
             set_attr(node, "input_bitdepth", args.bits)
             set_attr(node, "input_scale", float(in_s))
             set_attr(node, "output_bitdepth", args.bits)
             set_attr(node, "output_scale", float(out_s))
-            set_attr(node, "exp_scale", int(args.exp_scale))
+            set_attr(node, "exp_scale", exp_scale)
             scale_of[node.output[0]] = float(out_s)
             counts["softmax"] += 1
 
