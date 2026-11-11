@@ -1,11 +1,153 @@
-idx	op	node	n	scale_in	scale_out	file_i8	file_f32
-0	Conv	/conv0/Conv	16008	26.224254608154297	22.721784591674805	000_conv0_Conv.i8.npy	000_conv0_Conv.f32.npy
-1	Relu	/Relu	16008		22.721784591674805	001_Relu.i8.npy	001_Relu.f32.npy
-2	Conv	/depthwise1/depthwise1.0/Conv	16008	22.721784591674805	11.598687171936035	002_depthwise1_depthwise1.0_Conv.i8.npy	002_depthwise1_depthwise1.0_Conv.f32.npy
-3	Conv	/depthwise1/depthwise1.1/Conv	16008	11.598687171936035	11.74638557434082	003_depthwise1_depthwise1.1_Conv.i8.npy	003_depthwise1_depthwise1.1_Conv.f32.npy
-4	Conv	/depthwise1/depthwise1.2/Conv	16008	11.74638557434082	11.895600318908691	004_depthwise1_depthwise1.2_Conv.i8.npy	004_depthwise1_depthwise1.2_Conv.f32.npy
-5	Conv	/depthwise1/depthwise1.3/Conv	16008	11.895600318908691	12.046372413635254	005_depthwise1_depthwise1.3_Conv.i8.npy	005_depthwise1_depthwise1.3_Conv.f32.npy
-6	Conv	/depthwise1/depthwise1.4/Conv	16008	12.046372413635254	12.198677062988281	006_depthwise1_depthwise1.4_Conv.i8.npy	006_depthwise1_depthwise1.4_Conv.f32.npy
-7	Conv	/depthwise1/depthwise1.5/Conv	16008	12.198677062988281	12.48197078704834	007_depthwise1_depthwise1.5_Conv.i8.npy	007_depthwise1_depthwise1.5_Conv.f32.npy
-8	Conv	/pointwise1/Conv	26680	12.48197078704834	12.006487846374512	008_pointwise1_Conv.i8.npy	008_pointwise1_Conv.f32.npy
-9	Relu	/Relu_1	26680		12.006487846374512	009_Relu_1.i8.npy	009_Relu_1.f32.npy
+idx	op	node	n	in_bits	out_bits	file_i8	file_f32
+0	Conv	/conv0/Conv	16008	8	8	000_conv0_Conv.i8.npy	000_conv0_Conv.f32.npy
+1	Relu	/Relu	16008		8	001_Relu.i8.npy	001_Relu.f32.npy
+2	Conv	/depthwise1/depthwise1.0/Conv	16008	8	8	002_depthwise1_depthwise1.0_Conv.i8.npy	002_depthwise1_depthwise1.0_Conv.f32.npy
+3	Conv	/depthwise1/depthwise1.1/Conv	16008	8	8	003_depthwise1_depthwise1.1_Conv.i8.npy	003_depthwise1_depthwise1.1_Conv.f32.npy
+4	Conv	/depthwise1/depthwise1.2/Conv	16008	8	8	004_depthwise1_depthwise1.2_Conv.i8.npy	004_depthwise1_depthwise1.2_Conv.f32.npy
+5	Conv	/depthwise1/depthwise1.3/Conv	16008	8	8	005_depthwise1_depthwise1.3_Conv.i8.npy	005_depthwise1_depthwise1.3_Conv.f32.npy
+6	Conv	/depthwise1/depthwise1.4/Conv	16008	8	8	006_depthwise1_depthwise1.4_Conv.i8.npy	006_depthwise1_depthwise1.4_Conv.f32.npy
+7	Conv	/depthwise1/depthwise1.5/Conv	16008	8	8	007_depthwise1_depthwise1.5_Conv.i8.npy	007_depthwise1_depthwise1.5_Conv.f32.npy
+8	Conv	/pointwise1/Conv	26680	8	8	008_pointwise1_Conv.i8.npy	008_pointwise1_Conv.f32.npy
+9	Relu	/Relu_1	26680		8	009_Relu_1.i8.npy	009_Relu_1.f32.npy
+10	Conv	/depthwise2/depthwise2.0/Conv	26680	8	8		
+11	Conv	/depthwise2/depthwise2.1/Conv	26680	8	8		
+12	Conv	/depthwise2/depthwise2.2/Conv	26680	8	8		
+13	Conv	/depthwise2/depthwise2.3/Conv	26680	8	8		
+14	Conv	/depthwise2/depthwise2.4/Conv	26680	8	8		
+15	Conv	/depthwise2/depthwise2.5/Conv	26680	8	8		
+16	Conv	/pointwise2/Conv	26680	8	8		
+17	Relu	/Relu_2	26680		8		
+18	Conv	/depthwise3/depthwise3.0/Conv	26680	8	8		
+19	Conv	/depthwise3/depthwise3.1/Conv	26680	8	8		
+20	Conv	/depthwise3/depthwise3.2/Conv	26680	8	8		
+21	Conv	/pointwise3/Conv	26680	8	8		
+22	Relu	/Relu_3	26680		8		
+23	Conv	/depthwise4/depthwise4.0/Conv	26680	8	8		
+24	Conv	/depthwise4/depthwise4.1/Conv	26680	8	8		
+25	Conv	/depthwise4/depthwise4.2/Conv	26680	8	8		
+26	Conv	/pointwise4/Conv	26680	8	8		
+27	Relu	/Relu_4	26680		8		
+28	Conv	/depthwise5/depthwise5.0/Conv	26680	8	8		
+29	Conv	/depthwise5/depthwise5.1/Conv	26680	8	8		
+30	Conv	/depthwise5/depthwise5.2/Conv	26680	8	8		
+31	Conv	/pointwise5/Conv	26680	8	8		
+32	Relu	/Relu_5	26680		8		
+33	Conv	/depthwise6/depthwise6.0/Conv	26680	8	8		
+34	Conv	/depthwise6/depthwise6.1/Conv	26680	8	8		
+35	Conv	/depthwise6/depthwise6.2/Conv	26680	8	8		
+36	Conv	/depthwise6/depthwise6.3/Conv	26680	8	8		
+37	Conv	/depthwise6/depthwise6.4/Conv	26680	8	8		
+38	Conv	/depthwise6/depthwise6.5/Conv	26680	8	8		
+39	Conv	/depthwise6/depthwise6.6/Conv	26680	8	8		
+40	Conv	/depthwise6/depthwise6.7/Conv	26680	8	8		
+41	Conv	/depthwise6/depthwise6.8/Conv	26680	8	8		
+42	Conv	/pointwise6/Conv	16008	8	8		
+43	Relu	/Relu_6	16008		8		
+44	Conv	/depthwise7/depthwise7.0/Conv	16008	8	8		
+45	Conv	/depthwise7/depthwise7.1/Conv	16008	8	8		
+46	Conv	/depthwise7/depthwise7.2/Conv	16008	8	8		
+47	Conv	/depthwise7/depthwise7.3/Conv	16008	8	8		
+48	Conv	/pointwise7/Conv	16008	8	8		
+49	Relu	/Relu_7	16008		8		
+50	Conv	/depthwise8/depthwise8.0/Conv	16008	8	8		
+51	Conv	/depthwise8/depthwise8.1/Conv	16008	8	8		
+52	Conv	/depthwise8/depthwise8.2/Conv	16008	8	8		
+53	Conv	/depthwise8/depthwise8.3/Conv	16008	8	8		
+54	Conv	/pointwise8/Conv	16008	8	8		
+55	Relu	/Relu_8	16008		8		
+56	Conv	/depthwise9/Conv	16008	8	8		
+57	Conv	/pointwise9/Conv	16008	8	8		
+58	Relu	/Relu_9	16008		8		
+59	Conv	/depthwise10/Conv	16008	8	8		
+60	Conv	/pointwise10/Conv	16008	8	8		
+61	Relu	/Relu_10	16008		8		
+62	Conv	/depthwise11/Conv	16008	8	8		
+63	Conv	/pointwise11/Conv	16008	8	8		
+64	Relu	/Relu_11	16008		8		
+65	Conv	/depthwise12/Conv	16008	8	8		
+66	Conv	/pointwise12/Conv	16008	8	8		
+67	Relu	/Relu_12	16008		8		
+68	Conv	/depthwise13/Conv	16008	8	8		
+69	Conv	/pointwise13/Conv	16008	8	8		
+70	Relu	/Relu_13	16008		8		
+71	Conv	/depthwise14/Conv	16008	8	8		
+72	Conv	/pointwise14/Conv	16008	8	8		
+73	Relu	/Relu_14	16008		8		
+74	Conv	/depthwise15/depthwise15.0/Conv	16008	8	8		
+75	Conv	/depthwise15/depthwise15.1/Conv	16008	8	8		
+76	Conv	/depthwise15/depthwise15.2/Conv	16008	8	8		
+77	Conv	/depthwise15/depthwise15.3/Conv	16008	8	8		
+78	Conv	/depthwise15/depthwise15.4/Conv	16008	8	8		
+79	Conv	/depthwise15/depthwise15.5/Conv	16008	8	8		
+80	Conv	/depthwise15/depthwise15.6/Conv	16008	8	8		
+81	Conv	/depthwise15/depthwise15.7/Conv	16008	8	8		
+82	Conv	/depthwise15/depthwise15.8/Conv	16008	8	8		
+83	Conv	/pointwise15/Conv	16008	8	8		
+84	Relu	/Relu_15	16008		8		
+85	Conv	/depthwise16/depthwise16.0/Conv	16008	8	8		
+86	Conv	/depthwise16/depthwise16.1/Conv	16008	8	8		
+87	Conv	/depthwise16/depthwise16.2/Conv	16008	8	8		
+88	Conv	/depthwise16/depthwise16.3/Conv	16008	8	8		
+89	Conv	/depthwise16/depthwise16.4/Conv	16008	8	8		
+90	Conv	/depthwise16/depthwise16.5/Conv	16008	8	8		
+91	Conv	/depthwise16/depthwise16.6/Conv	16008	8	8		
+92	Conv	/depthwise16/depthwise16.7/Conv	16008	8	8		
+93	Conv	/depthwise16/depthwise16.8/Conv	16008	8	8		
+94	Conv	/pointwise16/Conv	16008	8	8		
+95	Relu	/Relu_16	16008		8		
+96	Conv	/depthwise17/depthwise17.0/Conv	16008	8	8		
+97	Conv	/depthwise17/depthwise17.1/Conv	16008	8	8		
+98	Conv	/depthwise17/depthwise17.2/Conv	16008	8	8		
+99	Conv	/depthwise17/depthwise17.3/Conv	16008	8	8		
+100	Conv	/pointwise17/Conv	16008	8	8		
+101	Relu	/Relu_17	16008		8		
+102	Conv	/depthwise18/depthwise18.0/Conv	16008	8	8		
+103	Conv	/depthwise18/depthwise18.1/Conv	16008	8	8		
+104	Conv	/depthwise18/depthwise18.2/Conv	16008	8	8		
+105	Conv	/depthwise18/depthwise18.3/Conv	16008	8	8		
+106	Conv	/pointwise18/Conv	16008	8	8		
+107	Relu	/Relu_18	16008		8		
+108	Conv	/depthwise19/depthwise19.0/Conv	16008	8	8		
+109	Conv	/depthwise19/depthwise19.1/Conv	16008	8	8		
+110	Conv	/pointwise19/Conv	10672	8	8		
+111	Relu	/Relu_19	10672		8		
+112	Conv	/depthwise20/depthwise20.0/Conv	10672	8	8		
+113	Conv	/depthwise20/depthwise20.1/Conv	10672	8	8		
+114	Conv	/pointwise20/Conv	10672	8	8		
+115	Relu	/Relu_20	10672		8		
+116	Conv	/depthwise21/Conv	10672	8	8		
+117	Conv	/pointwise21/Conv	10672	8	8		
+118	Relu	/Relu_21	10672		8		
+119	Conv	/depthwise22/Conv	10672	8	8		
+120	Conv	/pointwise22/Conv	10672	8	8		
+121	Relu	/Relu_22	10672		8		
+122	Conv	/depthwise23/depthwise23.0/Conv	10672	8	8		
+123	Conv	/depthwise23/depthwise23.1/Conv	10672	8	8		
+124	Conv	/pointwise23/Conv	10672	8	8		
+125	Relu	/Relu_23	10672		8		
+126	Conv	/depthwise24/Conv	10672	8	8		
+127	Conv	/pointwise24/Conv	10672	8	8		
+128	Relu	/Relu_24	10672		8		
+129	Conv	/depthwise25/Conv	10672	8	8		
+130	Conv	/pointwise25/Conv	10672	8	8		
+131	Relu	/Relu_25	10672		8		
+132	Conv	/depthwise26/depthwise26.0/Conv	10672	8	8		
+133	Conv	/depthwise26/depthwise26.1/Conv	10672	8	8		
+134	Conv	/depthwise26/depthwise26.2/Conv	10672	8	8		
+135	Conv	/depthwise26/depthwise26.3/Conv	10672	8	8		
+136	Conv	/depthwise26/depthwise26.4/Conv	10672	8	8		
+137	Conv	/depthwise26/depthwise26.5/Conv	10672	8	8		
+138	Conv	/depthwise26/depthwise26.6/Conv	10672	8	8		
+139	Conv	/depthwise26/depthwise26.7/Conv	10672	8	8		
+140	Conv	/depthwise26/depthwise26.8/Conv	10672	8	8		
+141	Conv	/pointwise26/Conv	10672	8	8		
+142	Relu	/Relu_26	10672		8		
+143	Conv	/depthwise27/Conv	10672	8	8		
+144	Conv	/pointwise27/Conv	10672	8	8		
+145	Relu	/Relu_27	10672		8		
+146	Conv	/conv28/Conv	16008	8	8		
+147	Relu	/Relu_28	16008		8		
+148	Conv	/decoder/Conv	6670	8	8		
+149	Reshape	/Reshape	6670		8		
+150	Transpose	/Transpose	6670		8		
+151	Softmax	/Softmax	6670	8	8		
