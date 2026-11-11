@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Annotate tinyx3_ivfs.onnx with the quantisation policy validated in requant_ab.py.
+"""Annotate tinyx3_ivfs.onnx with the quantisation the compiler actually supports.
 
-Three changes over attach_quant.py (per-tensor / absmax / all-int8):
+Rules (verified against the reference file ctc_test.tinyx3.onnx):
+  * activation scales are PER-TENSOR only - per-channel is not implemented for
+    Conv input/output (ac_model_sight/quantizer/utils/act_quant.py raises
+    NotImplementedError for it), so every activation scale is a scalar;
+  * ONE scale per tensor: a Relu / Reshape / Transpose output carries exactly
+    the scale of its input tensor, and a Conv input_scale is the scale of the
+    tensor it consumes (in the reference: 29/29 Relu and 120/120 Conv agree);
+  * weights are per-channel int8 (`weight_ch_scales = 127 / max|w|_c`);
+  * the calibrated tensors (network input, Conv outputs, Softmax in/out) are
+    clipped at `--pct` instead of absmax, which was the one remaining lever
+    once per-channel is off the table;
+  * decoder conv / Reshape / Transpose / Softmax stay 8-bit.
 
-  1. per-channel activation scales  (dims [1], attribute `*_scales` + `*_quant_dim`)
-  2. p99.9 clipping instead of absmax
-  3. int16 for the depthwise blocks
-
-The decoder conv, the softmax chain and the network output stay scalar and
-int8: a per-class scale on the logits would change the argmax itself.
-
-    python attach_quant_v2.py --out ../../onnx_models/tinyx3_ivfs_q8.onnx
-
-Scale convention matches the compiler reference file ctc_test.tinyx3.onnx:
-q = round(real * scale), i.e. scale is a MULTIPLIER (scale = qmax / ref).
+    python attach_quant_v2.py --pct 99.9
 """
 import argparse
 import glob
@@ -24,23 +25,21 @@ import onnx
 import onnxruntime as ort
 from onnx import numpy_helper
 
-SCALE_ATTRS = ("input_scale", "output_scale", "exp_scale", "weight_ch_scales",
-               "input_scales", "output_scales", "input_quant_dim",
-               "output_quant_dim", "input_bitdepth", "output_bitdepth",
-               "weight_bitdepth", "py_module_name", "py_module_type")
+QUANT_SUFFIX = ("_scale", "_scales", "_bitdepth", "_quant_dim", "_quant", "mode")
 
 
 def stripped(model):
     m = onnx.ModelProto()
     m.CopyFrom(model)
     for n in m.graph.node:
-        keep = [a for a in n.attribute if a.name not in SCALE_ATTRS]
+        keep = [a for a in n.attribute if not a.name.endswith(QUANT_SUFFIX)]
         del n.attribute[:]
         n.attribute.extend(keep)
     return m
 
 
 def calibrate(model, vecdir, pct):
+    """max|.| and the pct percentile of every tensor over the calibration set."""
     m = stripped(model)
     have = {o.name for o in m.graph.output}
     for n in m.graph.node:
@@ -48,49 +47,46 @@ def calibrate(model, vecdir, pct):
             if o and o not in have:
                 m.graph.output.extend([onnx.ValueInfoProto(name=o)])
                 have.add(o)
-    p = "/tmp/_calib_v2.onnx"
-    onnx.save(m, p)
-    sess = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
+    onnx.save(m, "/tmp/_calib_v2.onnx")
+    sess = ort.InferenceSession("/tmp/_calib_v2.onnx", providers=["CPUExecutionProvider"])
     names = [o.name for o in sess.get_outputs()]
 
-    files = sorted(glob.glob(os.path.join(vecdir, "input_*.npy")))
     acc = {n: [] for n in names}
     acc["input"] = []
+    files = sorted(glob.glob(os.path.join(vecdir, "input_*.npy")))
     for f in files:
         x = np.load(f)
         acc["input"].append(np.asarray(x).reshape(-1))
         for n, o in zip(names, sess.run(None, {"input": x})):
-            acc[n].append(o)
-    print("calibrated on %d vectors" % len(files))
+            acc[n].append(np.asarray(o).reshape(-1))
 
     stats = {}
-    for n in list(acc.keys()):
-        L = acc.pop(n)
-        if np.asarray(L[0]).ndim == 4:
-            A = np.concatenate([a.reshape(a.shape[0], a.shape[1], -1) for a in L], axis=2)
-        else:
-            A = np.concatenate([np.asarray(a).reshape(1, 1, -1) for a in L], axis=2)
-        ab = np.abs(A)
-        stats[n] = dict(ch_amax=ab.max(axis=(0, 2)),
-                        ch_pct=np.percentile(ab, pct, axis=(0, 2)),
-                        amax=float(ab.max()),
-                        pct=float(np.percentile(ab, pct)),
-                        ndim=np.asarray(L[0]).ndim)
-        del L, A, ab
+    for k in list(acc.keys()):
+        ab = np.abs(np.concatenate(acc.pop(k)))
+        stats[k] = (float(ab.max()), float(np.percentile(ab, pct)))
+        del ab
+    print("calibrated on %d vectors, clip = p%g" % (len(files), pct))
     return stats
 
 
-def bits_of_tensors(nodes, int16_act=False):
-    """All int8 by default: weights are int8 only, and int16 activations were
-    measured to add nothing once the weights stay 8-bit (79.2% vs 80.7%)."""
-    tb = {"input": 8}
+def tensor_scales(nodes, stats, pct):
+    """One multiplier per tensor. Only calibrated tensors use the percentile."""
+    def ref(t):
+        amax, p = stats[t]
+        return p if pct is not None else amax
+
+    sc = {"input": 127.0 / max(ref("input"), 1e-12)}
     for n in nodes:
         if n.op_type == "Constant":
             continue
-        in16 = tb.get(n.input[0], 8) == 16
-        out16 = int16_act and (("depthwise" in n.name) or (in16 and n.op_type == "Relu"))
-        tb[n.output[0]] = 16 if out16 else 8
-    return tb
+        t = n.output[0]
+        if n.op_type == "Conv":
+            sc[t] = 127.0 / max(ref(t), 1e-12)
+        elif n.op_type == "Softmax":
+            sc[t] = 127.0 / max(stats[t][0], 1e-12)     # probabilities: keep the peak
+        else:
+            sc[t] = sc[n.input[0]]                      # Relu / Reshape / Transpose
+    return sc
 
 
 def add(node, name, value):
@@ -100,16 +96,6 @@ def add(node, name, value):
     node.attribute.append(onnx.helper.make_attribute(name, value))
 
 
-def set_quant(prefix, node, ref, bits, per_channel, qmax):
-    add(node, "%s_bitdepth" % prefix, int(bits))
-    amp = np.maximum(np.asarray(ref, np.float64), 1e-12)
-    if per_channel:
-        add(node, "%s_scales" % prefix, [float(x) for x in qmax / amp])
-        add(node, "%s_quant_dim" % prefix, [1])
-    else:
-        add(node, "%s_scale" % prefix, float(qmax / float(amp.reshape(-1)[0])))
-
-
 def main():
     ap = argparse.ArgumentParser()
     here = os.path.dirname(os.path.abspath(__file__))
@@ -117,65 +103,71 @@ def main():
     ap.add_argument("--model", default=os.path.join(root, "onnx_models", "tinyx3_ivfs.onnx"))
     ap.add_argument("--vectors", default=os.path.join(root, "test_vectors", "tinyx3_ivfs_folded"))
     ap.add_argument("--out", default=os.path.join(root, "onnx_models", "tinyx3_ivfs_q8.onnx"))
-    ap.add_argument("--pct", type=float, default=99.9)
-    ap.add_argument("--scalar", action="store_true",
-                    help="force per-tensor activation scales (schema fallback)")
-    ap.add_argument("--int16-act", action="store_true",
-                    help="int16 activations in the depthwise blocks (no gain, off)")
+    ap.add_argument("--pct", type=float, default=99.5)
     a = ap.parse_args()
-    scalar_scales = a.scalar
 
-    model = stripped(onnx.load(a.model))   # drop the previous annotation entirely
+    src = onnx.load(a.model)
+    model = stripped(src)
     stats = calibrate(model, a.vectors, a.pct)
-    nodes = [n for n in model.graph.node]
-    tb = bits_of_tensors(nodes, a.int16_act)
+    nodes = [n for n in model.graph.node if n.op_type != "Constant"]
+    sc = tensor_scales(nodes, stats, a.pct)
+    wi = {i.name: i for i in model.graph.initializer}
 
     for n in nodes:
-        if n.op_type == "Constant":
-            continue
-        bits_in = tb.get(n.input[0], 8)
-        bits_out = tb[n.output[0]]
-
-        def per_ch(t):
-            # keyed on the TENSOR, not on its consumer: the decoder conv reads a
-            # per-channel tensor and writes the scalar logits.
-            st = stats[t]
-            if scalar_scales:
-                return False
-            return st["ndim"] == 4 and np.asarray(st["ch_pct"]).size > 1 \
-                and "decoder" not in t
-
         if n.op_type == "Conv":
-            pc = per_ch(n.input[0])
-            set_quant("input", n, stats[n.input[0]]["ch_pct" if pc else "pct"],
-                      bits_in, pc, 127.0 if bits_in == 8 else 32767.0)
+            add(n, "input_bitdepth", 8)
+            add(n, "input_scale", float(sc[n.input[0]]))
             add(n, "weight_bitdepth", 8)
-            w = numpy_helper.to_array(
-                [i for i in model.graph.initializer if i.name == n.input[1]][0])
-            wm = np.abs(w.astype(np.float64)).reshape(w.shape[0], -1).max(axis=1)
+            w = numpy_helper.to_array(wi[n.input[1]]).astype(np.float64)
+            wm = np.abs(w).reshape(w.shape[0], -1).max(axis=1)
             add(n, "weight_ch_scales", [float(x) for x in 127.0 / np.maximum(wm, 1e-12)])
+            add(n, "output_bitdepth", 8)
+            add(n, "output_scale", float(sc[n.output[0]]))
         elif n.op_type == "Softmax":
-            sin = stats[n.input[0]]["pct"]
-            sout = stats[n.output[0]]["amax"]
-            set_quant("input", n, sin, 8, False, 127.0)
-            set_quant("output", n, sout, 8, False, 127.0)
-            add(n, "exp_scale", float((127.0 / sout) / (127.0 / sin)))
+            add(n, "input_bitdepth", 8)
+            add(n, "input_scale", float(sc[n.input[0]]))
+            add(n, "output_bitdepth", 8)
+            add(n, "output_scale", float(sc[n.output[0]]))
+            add(n, "exp_scale", float(sc[n.output[0]] / sc[n.input[0]]))
             add(n, "mode", 0)
-            continue
-
-        pco = per_ch(n.output[0])
-        set_quant("output", n, stats[n.output[0]]["ch_pct" if pco else "pct"],
-                  bits_out, pco, 127.0 if bits_out == 8 else 32767.0)
+        else:
+            add(n, "output_bitdepth", 8)
+            add(n, "output_scale", float(sc[n.output[0]]))
 
     onnx.save(model, a.out)
-    print("wrote %s  (%d nodes)" % (a.out, len(model.graph.node)))
+    print("wrote %s (%d nodes)" % (a.out, len(model.graph.node)))
 
-    # weights must be untouched
-    src = {i.name: i.SerializeToString() for i in onnx.load(a.model).graph.initializer}
-    dst = {i.name: i.SerializeToString() for i in model.graph.initializer}
-    print("initializers unchanged:", src == dst)
-    b16 = sum(1 for v in tb.values() if v == 16)
-    print("int16 tensors: %d / %d" % (b16, len(tb)))
+    # ---- invariants the reference file obeys
+    prod = {}
+    for n in model.graph.node:
+        for o in n.output:
+            prod[o] = n
+    bad = []
+    for n in model.graph.node:
+        if n.op_type in ("Relu", "Reshape", "Transpose"):
+            up = prod.get(n.input[0])
+            if up is None:
+                continue
+            if _attr(up, "output_scale") != _attr(n, "output_scale"):
+                bad.append((n.name, "elementwise scale differs from producer"))
+        if n.op_type == "Conv":
+            up = prod.get(n.input[0])
+            if up is not None and _attr(up, "output_scale") != _attr(n, "input_scale"):
+                bad.append((n.name, "conv input_scale differs from producer"))
+    print("invariant violations:", len(bad))
+    for b in bad[:5]:
+        print("  ", b)
+
+    src_i = {i.name: i.SerializeToString() for i in src.graph.initializer}
+    dst_i = {i.name: i.SerializeToString() for i in model.graph.initializer}
+    print("initializers unchanged:", src_i == dst_i)
+
+
+def _attr(n, name):
+    for a in n.attribute:
+        if a.name == name:
+            return onnx.helper.get_attribute_value(a)
+    return None
 
 
 if __name__ == "__main__":

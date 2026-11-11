@@ -1,3 +1,3 @@
 tensor	shape	dtype	scale(multiplier)	divisor(1/scale)	bits
-input	1,1,3,1334	int8	41.968292236	0.023827512	8
+input	1,1,3,1334	int8	54.445362091	0.018367037	8
 output	1,1,1334,5	int8	128.002410889	0.007812353	8
