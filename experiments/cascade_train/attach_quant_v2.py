@@ -80,14 +80,15 @@ def calibrate(model, vecdir, pct):
     return stats
 
 
-def bits_of_tensors(nodes):
-    """8/16 per tensor: depthwise convs and their Relu consumers run in int16."""
+def bits_of_tensors(nodes, int16_act=False):
+    """All int8 by default: weights are int8 only, and int16 activations were
+    measured to add nothing once the weights stay 8-bit (79.2% vs 80.7%)."""
     tb = {"input": 8}
     for n in nodes:
         if n.op_type == "Constant":
             continue
         in16 = tb.get(n.input[0], 8) == 16
-        out16 = ("depthwise" in n.name) or (in16 and n.op_type == "Relu")
+        out16 = int16_act and (("depthwise" in n.name) or (in16 and n.op_type == "Relu"))
         tb[n.output[0]] = 16 if out16 else 8
     return tb
 
@@ -117,12 +118,17 @@ def main():
     ap.add_argument("--vectors", default=os.path.join(root, "test_vectors", "tinyx3_ivfs_folded"))
     ap.add_argument("--out", default=os.path.join(root, "onnx_models", "tinyx3_ivfs_q8.onnx"))
     ap.add_argument("--pct", type=float, default=99.9)
+    ap.add_argument("--scalar", action="store_true",
+                    help="force per-tensor activation scales (schema fallback)")
+    ap.add_argument("--int16-act", action="store_true",
+                    help="int16 activations in the depthwise blocks (no gain, off)")
     a = ap.parse_args()
+    scalar_scales = a.scalar
 
     model = stripped(onnx.load(a.model))   # drop the previous annotation entirely
     stats = calibrate(model, a.vectors, a.pct)
     nodes = [n for n in model.graph.node]
-    tb = bits_of_tensors(nodes)
+    tb = bits_of_tensors(nodes, a.int16_act)
 
     for n in nodes:
         if n.op_type == "Constant":
@@ -131,21 +137,23 @@ def main():
         bits_out = tb[n.output[0]]
 
         def per_ch(t):
+            # keyed on the TENSOR, not on its consumer: the decoder conv reads a
+            # per-channel tensor and writes the scalar logits.
             st = stats[t]
+            if scalar_scales:
+                return False
             return st["ndim"] == 4 and np.asarray(st["ch_pct"]).size > 1 \
-                and "decoder" not in n.name
+                and "decoder" not in t
 
         if n.op_type == "Conv":
             pc = per_ch(n.input[0])
             set_quant("input", n, stats[n.input[0]]["ch_pct" if pc else "pct"],
                       bits_in, pc, 127.0 if bits_in == 8 else 32767.0)
-            wbits = 16 if "depthwise" in n.name else 8
-            add(n, "weight_bitdepth", wbits)
+            add(n, "weight_bitdepth", 8)
             w = numpy_helper.to_array(
                 [i for i in model.graph.initializer if i.name == n.input[1]][0])
             wm = np.abs(w.astype(np.float64)).reshape(w.shape[0], -1).max(axis=1)
-            wq = 32767.0 if wbits == 16 else 127.0
-            add(n, "weight_ch_scales", [float(x) for x in wq / np.maximum(wm, 1e-12)])
+            add(n, "weight_ch_scales", [float(x) for x in 127.0 / np.maximum(wm, 1e-12)])
         elif n.op_type == "Softmax":
             sin = stats[n.input[0]]["pct"]
             sout = stats[n.output[0]]["amax"]
