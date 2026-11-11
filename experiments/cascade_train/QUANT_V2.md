@@ -3,14 +3,9 @@
 生成：`attach_quant_v2.py`　校验：`check_quant.py`
 
 ```bash
-# 主方案：逐通道激活 scale
-python experiments/cascade_train/attach_quant_v2.py
-# 退路：标量 schema（编译器若不支持 input_scales 就用这个）
-python experiments/cascade_train/attach_quant_v2.py --scalar --out onnx_models/tinyx3_ivfs_q8s.onnx
-
-python experiments/cascade_train/check_quant.py                                    # 主方案
-python experiments/cascade_train/check_quant.py --model onnx_models/tinyx3_ivfs_q8s.onnx
-python experiments/cascade_train/check_quant.py --model onnx_models/tinyx3_ivfs.onnx      # 旧文件
+python experiments/cascade_train/attach_quant_v2.py     # -> onnx_models/tinyx3_ivfs_q8.onnx
+python experiments/cascade_train/check_quant.py         # 用文件自身的注释做整数仿真
+python experiments/cascade_train/check_quant.py --model onnx_models/tinyx3_ivfs.onnx   # 对比旧文件
 ```
 
 ## 改了什么
@@ -30,8 +25,7 @@ decoder conv、Reshape/Transpose、Softmax 保持**标量 int8**——对 logits
 | 方案 | 帧 argmax | 解码 identity |
 |---|---|---|
 | 旧文件（per-tensor / absmax） | 78.31% | 64.10% |
-| 仅 ②（`tinyx3_ivfs_q8s.onnx`，标量 schema） | 86.55% | 73.48% |
-| **①+②（`tinyx3_ivfs_q8.onnx`）** | **90.43%** | **79.80%** |
+| **`tinyx3_ivfs_q8.onnx`（①+②）** | **90.43%** | **79.80%** |
 | 理想上界（只量化输出，不可实现） | — | 97.85% |
 
 分项（40 向量标定 / 10 向量评估）：per-channel +14.5 pt，p99.9 单独 +8.9 pt，两者叠加 +16.5 pt。
@@ -50,8 +44,8 @@ decoder conv、Reshape/Transpose、Softmax 保持**标量 int8**——对 logits
 ## 编译器侧仍需确认
 
 新文件对隐藏层用 `input_scales` / `output_scales`（FLOATS 列表）+ `*_quant_dim = [1]`，参考文件里只有标量 `input_scale`。
-- 支持 → 用 `tinyx3_ivfs_q8.onnx`，identity 79.8%
-- 不支持 → 用 `tinyx3_ivfs_q8s.onnx`，schema 与现在完全一致，identity 73.5%
+
+若编译器暂不支持，可用 `attach_quant_v2.py --scalar` 生成标量版（schema 与旧文件完全一致，实测 identity 73.48%），但这份不随仓库提供，以免和主方案混淆。
 
 ## 已知边界
 
