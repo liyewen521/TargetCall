@@ -1,0 +1,9 @@
+{
+  "model": "tinyx3_ivfs_q8.onnx",
+  "model_sha256": "61ad54a0ceb0ab773e7117d65f242ff253a512bf7da825211e0ad08fa989b379",
+  "input": "input_000.npy",
+  "input_sha256": "7516af2aab0f69b16f675f80ae00c9d44a04b2a7243a490b4da9c30c83e6705a",
+  "mode": "int",
+  "scale_convention": "divisor",
+  "node_count": 152
+}

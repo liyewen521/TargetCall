@@ -1,0 +1,17 @@
+backend:
+  target: rhblite
+
+quantizer:
+  default:
+    input:
+      format: int8
+      dims: [0]  # Fixed batch=1: a scalar activation scale.
+    weight:
+      format: int8
+      dims: [0]  # One scale per output channel.
+    bias:
+      format: int16
+      dims: [0]
+    output:
+      format: int8
+      dims: [0]

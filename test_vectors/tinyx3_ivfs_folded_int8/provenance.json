@@ -1,0 +1,16 @@
+{
+  "model": "tinyx3_ivfs_q8.onnx",
+  "model_sha256": "61ad54a0ceb0ab773e7117d65f242ff253a512bf7da825211e0ad08fa989b379",
+  "scale_convention": "divisor",
+  "output_kind": "quantized float golden, not pipeline",
+  "quantization": {
+    "quantization.scale_convention": "divisor",
+    "quantization.backend": "rhblite",
+    "quantization.bias_bitdepth": "16",
+    "quantization.calibration_vectors": "000-039",
+    "quantization.percentile": "99.5"
+  },
+  "cases": 50,
+  "input_clipped": 857,
+  "input_elements": 200100
+}

@@ -196,6 +196,19 @@ python -m bonito basecaller checkpoints/TINYX011 reads/ \
 `--modeltype` maps to the standalone classes as `default`, `tinynoskipx0111`,
 `tinynoskipx011`, `tinynoskipx01`, `tinynoskipx2`, and `tinynoskipx3`.
 
+## ACCESS IVFS / RHB-Lite deployment
+
+`tinyx3_ivfs` uses folded inputs `[1,1,3,1334]` and emits probabilities
+`[1,1,1334,5]`. The deployment ONNX files use RHB-Lite **divisor scales**,
+symmetric int8 weights/activations, and explicitly configured int16 bias.
+The q8 file uses p99.5 ranges calibrated on vectors 000–039; 040–049 are held out.
+
+See [the quantization workflow](experiments/cascade_train/QUANT_V2.md) for the
+chip test handoff, dependencies, artifact regeneration and TargetCall reference tests.
+The workflow runs independently of ACModelSight and requires no quantizer changes.
+End-to-end agreement with the unmodified quantizer and hardware is not verified.
+Boundary golden outputs and full integer-pipeline outputs are distinct artifacts.
+
 # <a name="cite"></a>Citing TargetCall
 
  TargetCall is described and evaluated in the following paper. If you find the repository and the code useful, please cite:

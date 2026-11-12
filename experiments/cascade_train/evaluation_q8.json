@@ -1,0 +1,66 @@
+{
+  "model": "tinyx3_ivfs_q8.onnx",
+  "model_sha256": "61ad54a0ceb0ab773e7117d65f242ff253a512bf7da825211e0ad08fa989b379",
+  "quantization": {
+    "quantization.scale_convention": "divisor",
+    "quantization.backend": "rhblite",
+    "quantization.bias_bitdepth": "16",
+    "quantization.calibration_vectors": "000-039",
+    "quantization.percentile": "99.5"
+  },
+  "reference": "float golden outputs (not ground-truth bases)",
+  "mean_frame_agreement": 0.8642428785607198,
+  "mean_decoded_identity": 0.7267484685439725,
+  "vectors": [
+    {
+      "index": 40,
+      "frame_agreement": 0.8365817091454273,
+      "decoded_identity": 0.6973684210526316
+    },
+    {
+      "index": 41,
+      "frame_agreement": 0.8755622188905547,
+      "decoded_identity": 0.7450980392156863
+    },
+    {
+      "index": 42,
+      "frame_agreement": 0.835832083958021,
+      "decoded_identity": 0.7060810810810811
+    },
+    {
+      "index": 43,
+      "frame_agreement": 0.8493253373313343,
+      "decoded_identity": 0.7459807073954984
+    },
+    {
+      "index": 44,
+      "frame_agreement": 0.8508245877061469,
+      "decoded_identity": 0.734006734006734
+    },
+    {
+      "index": 45,
+      "frame_agreement": 0.8320839580209896,
+      "decoded_identity": 0.7554179566563468
+    },
+    {
+      "index": 46,
+      "frame_agreement": 0.8598200899550225,
+      "decoded_identity": 0.6875
+    },
+    {
+      "index": 47,
+      "frame_agreement": 0.8845577211394303,
+      "decoded_identity": 0.7833333333333333
+    },
+    {
+      "index": 48,
+      "frame_agreement": 0.9025487256371814,
+      "decoded_identity": 0.7320261437908497
+    },
+    {
+      "index": 49,
+      "frame_agreement": 0.9152923538230885,
+      "decoded_identity": 0.680672268907563
+    }
+  ]
+}
