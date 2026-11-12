@@ -73,3 +73,20 @@ def test_comparator_rejects_duplicate_normalized_names(tmp_path):
 def test_empty_decodes_are_well_defined():
     assert edit_identity([], []) == 1
     assert edit_identity([], [1]) == 0
+
+
+def test_cmodel_softmax_replay_pads_transposed_logits_and_uses_instruction_scales():
+    from replay_cmodel import replay_softmax
+
+    logits = np.arange(30, dtype=np.int8).reshape(1, 5, 1, 6).transpose(0, 2, 3, 1)
+    fields = dict(sm_matrix_y=5, sm_matrix_x=4, tile_mode=0, spu_op=0, sm_mode=0,
+                  sm_shift1=4, sm_shift2=2, sm_shift0=7)
+
+    def kernel(padded, rows, cols, input_scale, exp_scale, output_scale, *, tile_mode, sm_mode):
+        assert padded.is_contiguous() and padded.shape == (1, 1, 16, 16)
+        np.testing.assert_array_equal(padded[:, :, :rows, :cols].numpy(), logits)
+        assert (input_scale.item(), exp_scale.item(), output_scale.item()) == (1/16, 1/4, 1/128)
+        assert (tile_mode, sm_mode) == (0, 0)
+        return padded.view(-1).tolist(), None, None
+
+    np.testing.assert_array_equal(replay_softmax(logits, fields, kernel), logits)

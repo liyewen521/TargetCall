@@ -55,3 +55,22 @@ def test_layer_dump_matches_the_pipeline_and_has_no_negative_relu():
             if node.op_type == 'Relu':
                 assert stored[name].min() >= 0
     np.testing.assert_array_equal(np.load(INT8 / 'layer_ref/conv0_Conv.acc.i32.npy'), acc['/conv0/Conv'])
+
+
+def test_compiler_copy_converts_divisors_and_preserves_graph_parameters():
+    from export_cmodel_onnx import SCALE_ATTRIBUTES, compiler_model
+
+    original, _, _ = read_annotations(MODEL)
+    converted = compiler_model(MODEL)
+    metadata = {p.key: p.value for p in converted.metadata_props}
+    assert metadata["quantization.scale_convention"] == "multiplier"
+    assert original.graph.initializer == converted.graph.initializer
+    for old, new in zip(original.graph.node, converted.graph.node):
+        for source, target in zip(old.attribute, new.attribute):
+            assert source.name == target.name
+            if source.name in SCALE_ATTRIBUTES:
+                values = onnx.helper.get_attribute_value(source)
+                expected = np.asarray(1.0 / np.asarray(values, dtype=np.float64), dtype=np.float32)
+                np.testing.assert_array_equal(onnx.helper.get_attribute_value(target), expected)
+            else:
+                assert source == target

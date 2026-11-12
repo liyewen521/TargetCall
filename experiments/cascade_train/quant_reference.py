@@ -100,9 +100,9 @@ def validate_annotations(nodes):
         scales[node.output[0]] = so
 
 
-def conv_integer(node, attrs, initializers, x):
-    """Return output codes and the int32 accumulator, including saturated bias."""
-    si, so = in_scale(attrs), out_scale(attrs)
+def conv_accumulate(node, attrs, initializers, x):
+    """Return the int32 accumulator with saturated bias and its divisor scales."""
+    si = in_scale(attrs)
     w = initializers[node.input[1]]
     sw = checked_scale(attrs.get("weight_ch_scales", attrs.get("weight_scale"))).reshape(-1)
     if sw.size not in (1, w.shape[0]):
@@ -124,7 +124,13 @@ def conv_integer(node, attrs, initializers, x):
     bounds = np.iinfo(np.int32)
     if np.any(acc < bounds.min) or np.any(acc > bounds.max):
         raise OverflowError("%s: int32 accumulator overflow" % node.name)
-    acc = acc.astype(np.int32)
+    return acc.astype(np.int32), acc_scale
+
+
+def conv_integer(node, attrs, initializers, x):
+    """Return output codes and the int32 accumulator, including saturated bias."""
+    so = out_scale(attrs)
+    acc, acc_scale = conv_accumulate(node, attrs, initializers, x)
     real = acc.astype(np.float32) * acc_scale.reshape(1, -1, 1, 1)
     return quantize(real, so, attrs["output_bitdepth"]), acc
 

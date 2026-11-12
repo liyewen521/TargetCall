@@ -113,7 +113,7 @@ python experiments/cascade_train/check_quant.py --model onnx_models/tinyx3_ivfs.
 python -m pytest -q experiments/cascade_train/tests
 ```
 
-TargetCall 的 10 项测试覆盖饱和与舍入、整数 bias、层间整数码传递、比较器失败状态，
+TargetCall 的测试覆盖饱和与舍入、整数 bias、层间整数码传递、比较器失败状态，
 以及全部 50 组边界向量和 case 000 的 152 个节点 dump 与本项目参考实现的一致性。
 提交前在临时目录完整重建了两份 ONNX、标定统计、129 个向量及参考文件和两份评估记录，
 与交付产物一致；比较器命令行的通过、单个整数码差异和缺层场景分别返回 0、1、2。
@@ -140,3 +140,29 @@ python experiments/cascade_train/compare_layers.py --sim sim_layers.npz
 形状不一致返回 2；数值不一致返回 1；通过返回 0。诊断部分 dump 时必须显式使用
 `--allow-partial`，允许展平布局比较时用 `--flatten`，容忍一定错误比例时用 `--thr`。
 这些放宽选项不用于默认验收。
+
+
+## 按 CModel 指令验证 tinyx3
+
+使用导出工具生成当前编译器读取的乘数 scale ONNX。TargetCall 的软件参考和测试向量使用原始除数 scale 模型。
+
+```bash
+python experiments/cascade_train/export_cmodel_onnx.py \
+  --out /tmp/tinyx3_ivfs_q8_multipliers.onnx
+```
+
+编译该副本并运行 CModel 后，用 demo 的 Python 3.9 环境读取对应的编译产物和 seed dump。
+`CASE_PATH` 与调用 `acsim.py` 时的 `--case_path` 相同。
+
+```bash
+DEMO=/root/ds/rhb/ACTransformer_toolChain_demo/demo
+CASE_PATH=/path/to/compiled/ctc_test.tinyx3/ctc_test.tinyx3
+PYTHONDONTWRITEBYTECODE=1 LD_LIBRARY_PATH="$DEMO/.py39lib:$LD_LIBRARY_PATH" \
+  PYTHONPATH="/opt/conda/lib/python3.9/site-packages${PYTHONPATH:+:$PYTHONPATH}" \
+  /opt/conda/envs/onnxrt/bin/python experiments/cascade_train/replay_cmodel.py \
+  --case-path "$CASE_PATH" --acsim-dir "$DEMO/acsim" --seed 0
+```
+
+脚本从测试向量和原始 ONNX 权重逐层计算。卷积使用 dump 中打包后的每通道倍率和 shift，
+Softmax 按指令的 shift、tile 和 mode 调用 demo 的 SPU 内核。逐层比较覆盖融合 ReLU 后的
+卷积输出、Softmax 输入和最终输出。可以用 `--model` 和 `--input` 指定与编译和仿真对应的版本。
