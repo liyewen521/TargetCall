@@ -26,7 +26,7 @@ ONNX 权重仍是浮点初始化器，由支持这些量化属性的编译流程
 `layer_ref/_runtime.onnx` 是去掉标注后的浮点诊断模型，不能用作此次量化部署模型。
 `output_XXX.npy` 是浮点 golden 在输出边界的量化结果，不能用作整条整数流水线的逐值期望。
 
-**当前产物使用 int16 bias，尚未与实际芯片配置确认。** 编译器需要使用相同的 bias 位宽、
+**芯片 bias 位宽已确认为 int16，与当前产物一致。** 编译器需要使用相同的 bias 位宽、
 `s_input * s_weight[channel]` 除数量化和对称饱和规则；配置不同应先调整 TargetCall 产物。
 硬件 Softmax LUT 和乘法/移位近似尚未验证，逐层差异需结合实际实现定位。
 本次交接不要求修改 ACModelSight。
@@ -61,7 +61,7 @@ python experiments/cascade_train/compare_layers.py --ref /tmp/ivfs_case040_ref/a
 - 权重 scale 为 `max(abs(w_channel)) / 127`，保存于 `weight_ch_scales`。
 - bias 按 `s_input * s_weight[channel]` 量化并饱和后加入整数累加器。
   本项目软件参考显式配置 **int16 bias**（范围 -32767 到 32767）；见 `rhblite.yaml`。
-  这是当前生成产物的配置，尚未由实际部署 YAML 确认，不能据此认定为芯片的固定规格。
+  该位宽与用户确认的芯片配置一致。
   `attach_quant_v2.py --bias-bits` 可设 8 或 16，生成的 Conv 必须携带 `bias_bitdepth`，
   仿真禁止在缺少该属性时猜测位宽。该属性由 TargetCall 标注工具写入，
   并非上述版本的 ACModelSight Conv 默认导出字段。
