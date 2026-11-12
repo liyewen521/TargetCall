@@ -14,11 +14,14 @@ from compare_layers import compare, norm
 from quant_reference import conv_accumulate, read_annotations
 
 
-FIELD = re.compile(r"\|\s*(\w+)\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\[\s*(-?\d+)\s*,")
+FIELD = re.compile(
+    r"\|\s*(\w+)\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*"
+    r"\[\s*(-?\d+(?:,\d{3})*)\s*,\s*(?:0[xX][0-9a-fA-F]+(?:,[0-9a-fA-F]+)*|0)\s*\]"
+)
 
 
 def instruction_fields(path):
-    return {name: int(value) for name, value in FIELD.findall(path.read_text())}
+    return {name: int(value.replace(",", "")) for name, value in FIELD.findall(path.read_text())}
 
 
 def replay_softmax(logits, fields, kernel):

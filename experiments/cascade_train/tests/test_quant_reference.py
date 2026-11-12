@@ -75,6 +75,19 @@ def test_empty_decodes_are_well_defined():
     assert edit_identity([], [1]) == 0
 
 
+
+def test_cmodel_instruction_fields_accept_grouped_decimal(tmp_path):
+    from replay_cmodel import instruction_fields
+
+    path = tmp_path / "softmax.inst"
+    path.write_text(
+        "| | sm_matrix_y | 24 |  9 | [ 1,333, 0x535] | |\n"
+        "| | sm_matrix_x | 40 | 25 | [     4,   0x4] | |\n"
+        "| | sm_shift2   | 53 | 49 | [     0,     0] | |\n"
+    )
+    assert instruction_fields(path) == {"sm_matrix_y": 1333, "sm_matrix_x": 4, "sm_shift2": 0}
+
+
 def test_cmodel_softmax_replay_pads_transposed_logits_and_uses_instruction_scales():
     from replay_cmodel import replay_softmax
 
