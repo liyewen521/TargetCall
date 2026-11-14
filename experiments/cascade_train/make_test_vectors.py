@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Quantize float golden boundaries using the model's RHB-Lite divisor scales.
-
-output_XXX.npy is a quantized float golden, not a full-pipeline output. Use
-layer_ref/all_layers.i8.npz for full-pipeline comparisons.
-"""
+"""Generate diagnostic float-boundary vectors using RHB-Lite divisor scales."""
 import argparse
 import hashlib
 import json
@@ -21,6 +17,9 @@ def main():
     ap.add_argument('--src', type=Path, default=root / 'test_vectors/tinyx3_ivfs_folded')
     ap.add_argument('--dst', type=Path, default=root / 'test_vectors/tinyx3_ivfs_folded_int8')
     args = ap.parse_args()
+    provenance = args.dst / 'provenance.json'
+    if provenance.is_file() and json.loads(provenance.read_text()).get('output_kind') == 'cmodel_replay':
+        ap.error('destination contains CModel vectors. Use --dst for a separate diagnostic directory')
     model, nodes, _ = read_annotations(args.model)
     active = [(n, d) for n, d in nodes if n.op_type != 'Constant']
     si, so = in_scale(active[0][1]), out_scale(active[-1][1])

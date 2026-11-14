@@ -21,9 +21,10 @@ Files:
   provenance.json          model/input hashes and dump mode
   _runtime.onnx             float graph with annotation attributes stripped
 
-all_layers["Softmax"] is the full quantized pipeline output. ../output_000.npy
-is the float golden quantized at the boundary and is not an integer-pipeline
-reference. ReLU codes are nonnegative; int8 codes stay in [-127,127].
+all_layers["Softmax"] is the final output of the TargetCall software pipeline.
+../output_000.npy is the expected CModel output for the compiled model
+recorded in ../provenance.json. ReLU codes are nonnegative and the software
+reference uses the symmetric int8 range [-127,127].
 
 --mode ideal is a diagnostic quantization of independent float activations.
 It must not be used for pipeline verification. Hardware Softmax lookup tables

@@ -17,14 +17,17 @@
 |---|---|
 | `test_vectors/tinyx3_ivfs_folded_int8/input_000.npy` | 首次上板输入，int8、`[1,1,3,1334]`，已折叠且已量化，直接使用整数码 |
 | 同目录 `input_001.npy` 至 `input_049.npy` | 后续测试输入；040–049 为留出样本 |
-| 同目录 `layer_ref/all_layers.i8.npz` | case 000 的 152 个节点参考；`Softmax` 键是 `[1,1,1334,5]` 的最终 int8 输出 |
+| 同目录 `output_000.npy` 至 `output_049.npy` | CModel 最终输出参考，int8、`[1,1,1334,5]`，可逐元素比较 |
+| 同目录 `layer_ref/all_layers.i8.npz` | case 000 的 152 个 TargetCall 软件参考节点，`Softmax` 键为软件量化流水线输出 |
 | 同目录 `layer_ref/manifest.tsv` | 每个节点的名称、形状和 scale |
 | 同目录 `layer_ref/conv0_Conv.acc.i32.npy` | 首层含整数 bias 的 int32 累加结果，形状 `[1,12,1,1334]` |
 
 编译时保留本模型的量化标注和静态 scale；若重新标定，需同步重建所有向量与参考。
 ONNX 权重仍是浮点初始化器，由支持这些量化属性的编译流程处理。
 `layer_ref/_runtime.onnx` 是去掉标注后的浮点诊断模型，不能用作此次量化部署模型。
-`output_XXX.npy` 是浮点 golden 在输出边界的量化结果，不能用作整条整数流水线的逐值期望。
+`output_XXX.npy` 由 TargetCall 按编译指令回放生成，已与对应 seed 的
+`net_csim_output.npz["out_84"]` 逐元素对齐。输出除数为 `1/128`，
+适用的 ONNX 和指令哈希见同目录的 `provenance.json`。
 
 **芯片 bias 位宽已确认为 int16，与当前产物一致。** 编译器需要使用相同的 bias 位宽、
 `s_input * s_weight[channel]` 除数量化和对称饱和规则；配置不同应先调整 TargetCall 产物。
@@ -106,7 +109,7 @@ Conv、ReLU、Reshape、Transpose 和 Softmax 节点；重建流程不调用 ACM
 ```bash
 python experiments/cascade_train/attach_quant_v2.py --pct 100 --out onnx_models/tinyx3_ivfs.onnx
 python experiments/cascade_train/attach_quant_v2.py --stats-out test_vectors/tinyx3_ivfs_folded_int8/act_maxabs.json
-python experiments/cascade_train/make_test_vectors.py
+python experiments/cascade_train/make_test_vectors.py --dst /tmp/tinyx3_float_boundary_int8
 python experiments/cascade_train/dump_layers.py --idx 0
 python experiments/cascade_train/check_quant.py --json experiments/cascade_train/evaluation_q8.json
 python experiments/cascade_train/check_quant.py --model onnx_models/tinyx3_ivfs.onnx --json experiments/cascade_train/evaluation_absmax.json
@@ -114,9 +117,9 @@ python -m pytest -q experiments/cascade_train/tests
 ```
 
 TargetCall 的测试覆盖饱和与舍入、整数 bias、层间整数码传递、比较器失败状态，
-以及全部 50 组边界向量和 case 000 的 152 个节点 dump 与本项目参考实现的一致性。
-提交前在临时目录完整重建了两份 ONNX、标定统计、129 个向量及参考文件和两份评估记录，
-与交付产物一致；比较器命令行的通过、单个整数码差异和缺层场景分别返回 0、1、2。
+以及 50 组输入的量化、CModel 输出文件的形状和哈希、case 000 软件参考的 152 个节点。
+生成浮点边界诊断向量时使用单独的 `--dst`。CModel 输出通过下文的指令回放生成，
+0–49 号用例均与 CModel 仿真输出逐值核对。
 这些检查不构成与原版 ACModelSight 的独立交叉验证。
 原版 RHB-Lite Conv 的 bias 广播问题使本次直接调用未能完成；量化器源码保持不变。
 
@@ -144,7 +147,7 @@ python experiments/cascade_train/compare_layers.py --sim sim_layers.npz
 
 ## 按 CModel 指令验证 tinyx3
 
-使用导出工具生成当前编译器读取的乘数 scale ONNX。TargetCall 的软件参考和测试向量使用原始除数 scale 模型。
+使用导出工具生成当前编译器读取的乘数 scale ONNX。软件参考和输入向量使用原始除数 scale 模型。
 
 ```bash
 python experiments/cascade_train/export_cmodel_onnx.py \

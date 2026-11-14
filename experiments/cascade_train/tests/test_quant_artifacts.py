@@ -5,10 +5,11 @@ from pathlib import Path
 
 import numpy as np
 import onnx
+import pytest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from quant_reference import in_scale, out_scale, quantize, read_annotations, run_integer, stripped
+from quant_reference import in_scale, quantize, read_annotations, run_integer, stripped
 
 ROOT = Path(__file__).resolve().parents[3]
 MODEL = ROOT / 'onnx_models/tinyx3_ivfs_q8.onnx'
@@ -29,15 +30,44 @@ def test_annotations_and_evaluation_are_bound_to_the_current_model():
     assert [r['index'] for r in evaluation['vectors']] == list(range(40, 50))
 
 
-def test_all_boundary_vectors_follow_divisor_scales_and_symmetric_range():
+def test_all_inputs_follow_divisor_scale_and_symmetric_range():
     _, nodes, _ = read_annotations(MODEL)
-    si, so = in_scale(nodes[0][1]), out_scale(nodes[-1][1])
+    scale = in_scale(nodes[0][1])
     for i in range(50):
-        for name, scale in [('input', si), ('output', so)]:
-            filename = '%s_%03d.npy' % (name, i)
-            actual = np.load(INT8 / filename)
-            np.testing.assert_array_equal(actual, quantize(np.load(FLOAT / filename), scale))
-            assert actual.dtype == np.int8 and actual.min() >= -127
+        filename = 'input_%03d.npy' % i
+        actual = np.load(INT8 / filename)
+        np.testing.assert_array_equal(actual, quantize(np.load(FLOAT / filename), scale))
+        assert actual.dtype == np.int8 and actual.min() >= -127
+
+
+def test_cmodel_output_vectors_match_provenance():
+    provenance = json.loads((INT8 / 'provenance.json').read_text())
+    assert provenance['output_kind'] == 'cmodel_replay'
+    cmodel = provenance['cmodel']
+    assert cmodel['softmax_output_shift'] == 7
+    assert [case['seed'] for case in cmodel['cases']] == list(range(50))
+    for case in cmodel['cases']:
+        tag = '%03d' % case['seed']
+        input_path = INT8 / ('input_%s.npy' % tag)
+        output_path = INT8 / ('output_%s.npy' % tag)
+        assert hashlib.sha256(input_path.read_bytes()).hexdigest() == case['input_sha256']
+        assert hashlib.sha256(output_path.read_bytes()).hexdigest() == case['output_sha256']
+        output = np.load(output_path, allow_pickle=False)
+        assert output.shape == (1, 1, 1334, 5) and output.dtype == np.int8 and output.min() >= 0
+
+
+def test_float_boundary_generator_preserves_cmodel_destination(tmp_path, monkeypatch):
+    from make_test_vectors import main
+
+    manifest = tmp_path / 'provenance.json'
+    metadata = (INT8 / 'provenance.json').read_bytes()
+    manifest.write_bytes(metadata)
+    monkeypatch.setattr(sys, 'argv', ['make_test_vectors.py', '--dst', str(tmp_path)])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+    assert list(tmp_path.iterdir()) == [manifest]
+    assert manifest.read_bytes() == metadata
 
 
 def test_layer_dump_matches_the_pipeline_and_has_no_negative_relu():
